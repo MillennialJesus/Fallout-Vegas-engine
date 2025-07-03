@@ -1,0 +1,3213 @@
+// Your "Input" tab should look like this
+// Fallout: New Vegas — AI Dungeon World Engine Core
+const modifier = (text) => {
+// Global triggers list
+if (!global.triggers) global.triggers = [];
+  // === 1. Initialization ===
+  if (!state.player) state.player = {};
+  if (!state.world) state.world = {};
+
+  const player = state.player;
+  const world = state.world;
+
+  // Player basics
+  if (!player.companions) player.companions = [];
+  if (!player.caps && player.caps !== 0) player.caps = 100;
+  if (!player.inventory) player.inventory = [];
+  if (!player.location) player.location = "Unknown";
+  if (!player.visitedLocations) player.visitedLocations = [];
+  if (!player.actionsLog) player.actionsLog = [];
+  if (!player.relationships) player.relationships = [];
+  if (player.fatigue === undefined) player.fatigue = 0;
+  if (player.hunger === undefined) player.hunger = 0;
+  if (player.thirst === undefined) player.thirst = 0;
+  if (!player.injuries) player.injuries = [];
+  if (!player.time) player.time = { hour: 8, day: 1 };
+  if (!player.unlockedDLCs) player.unlockedDLCs = { sierraMadre: false, bigMT: false, zion: false, divide: false };
+  if (!player.sierraMadreQuest) player.sierraMadreQuest = { started: false, completed: false };
+  if (player.inSierraMadre === undefined) player.inSierraMadre = false;
+
+  // Factions and towns
+  if (!player.factionAlignment) player.factionAlignment = {
+    NCR: 0, Legion: 0, House: 0, TheKings: 0, YesMan: 0, Boomers: 0, Brotherhood: 0, GreatKhans: 0, Followers: 0, PowderGangers: 0,
+    Goodsprings: 0, Primm: 0, Novac: 0, Freeside: 0, Jacobstown: 0, Westside: 0, NorthVegasSquare: 0,
+    Tops: 0, Gomorrah: 0, UltraLuxe: 0
+  };
+  if (!player.factionMembership) player.factionMembership = {
+    NCR: false, Legion: false, House: false, TheKings: false, YesMan: false, Boomers: false, Brotherhood: false, GreatKhans: false,
+    Followers: false, PowderGangers: false,
+    Goodsprings: false, Primm: false, Novac: false, Freeside: false, Jacobstown: false, Westside: false, NorthVegasSquare: false,
+    Tops: true, Gomorrah: true, UltraLuxe: true // Casinos start as true (can play)
+  };
+
+  // Gambling system
+  if (!player.casinoChips) player.casinoChips = { Tops: 0, Gomorrah: 0, UltraLuxe: 0 };
+  if (!player.casinoWinnings) player.casinoWinnings = { Tops: 0, Gomorrah: 0, UltraLuxe: 0 };
+
+  // Reputation (optional, adjust as needed)
+  if (!player.reputation) player.reputation = {};
+
+  // DLC quest state
+  if (!player.sierraMadreQuest) player.sierraMadreQuest = { started: false, completed: false };
+
+  // World state
+  if (!world.locations) world.locations = [];
+  // Only add if missing
+  ["Sierra Madre", "Big MT", "Zion Canyon", "The Divide"].forEach(loc => {
+    if (!world.locations.includes(loc)) world.locations.push(loc);
+  });
+
+  if (!world.companions) world.companions = [
+    { name: "Cass", uniqueTag: "cass", location: "Mojave Outpost", status: "available", trust: 50 },
+    { name: "Boone", uniqueTag: "boone", location: "Novac", status: "available", trust: 50 },
+    { name: "Veronica", uniqueTag: "veronica", location: "Hidden Valley", status: "available", trust: 50 },
+    { name: "Raul", uniqueTag: "raul", location: "Raul's Shack", status: "available", trust: 50 },
+    { name: "Lily", uniqueTag: "lily", location: "Jacobstown", status: "available", trust: 50 },
+    { name: "Arcade", uniqueTag: "arcade", location: "Old Mormon Fort", status: "available", trust: 50 },
+    { name: "ED-E", uniqueTag: "ed-e", location: "Primm", status: "available", trust: 50 },
+    { name: "Rex", uniqueTag: "rex", location: "The King's School of Impersonation", status: "available", trust: 50 },
+    { name: "Dogmeat", uniqueTag: "dogmeat", location: "Random Wasteland", status: "available", trust: 50 }
+  ];
+
+// ---- Timeline ----
+if (!state.world.timeline) {
+  state.world.timeline = [
+    // Example timeline events:
+   {
+    id: "benny_shoots_courier",
+    day: 0,
+    hour: 0,
+    status: "complete",
+    description: "The mysterious Benny shot the Courier and fled Goodsprings with the Platinum Chip.",
+    playerImpact: false,
+    affectedByPlayer: false,
+  },
+  {
+    id: "powder_gangers_escape",
+    day: 0,
+    hour: 2,
+    status: "complete",
+    description: "Powder Gangers escaped the NCR Correctional Facility and began raiding the Mojave.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // ACT 1: COURIER RECOVERY & LOCAL EVENTS
+  {
+    id: "courier_awakens",
+    day: 2,
+    hour: 8,
+    status: "pending",
+    description: "The Courier is expected to awaken in Doc Mitchell's house in Goodsprings.",
+    playerImpact: false,
+    affectedByPlayer: true,
+  },
+  {
+    id: "powder_ganger_attack_goodsprings",
+    day: 2,
+    hour: 16,
+    status: "pending",
+    description: "Powder Gangers are preparing an attack on Goodsprings.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "benny_arrives_new_vegas",
+    day: 2,
+    hour: 20,
+    status: "pending",
+    description: "Benny and his crew arrive at the Tops Casino on the New Vegas Strip.",
+    playerImpact: false,
+    affectedByPlayer: true,
+  },
+
+  // ACT 2: MOJAVE FACTIONS MOVE
+  {
+    id: "ncr_nelson_operation",
+    day: 3,
+    hour: 10,
+    status: "pending",
+    description: "NCR forces plan an operation to retake Nelson from the Legion.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_attack_nipton",
+    day: 3,
+    hour: 15,
+    status: "pending",
+    description: "Caesar's Legion attacks and burns Nipton, leaving it as a warning.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "great_khans_retreat",
+    day: 4,
+    hour: 12,
+    status: "pending",
+    description: "The Great Khans retreat from Boulder City after a failed deal.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "vault_19_turmoil",
+    day: 5,
+    hour: 9,
+    status: "pending",
+    description: "Conflict between the Red and Blue sectors at Vault 19 escalates.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // ACT 3: THE PLATINUM CHIP AND STRIP INTRIGUE
+  {
+    id: "benny_meets_house",
+    day: 5,
+    hour: 21,
+    status: "pending",
+    description: "Benny secretly meets with Mr. House to negotiate using the Platinum Chip.",
+    playerImpact: false,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_plans_luck",
+    day: 6,
+    hour: 8,
+    status: "pending",
+    description: "Mr. House readies the Lucky 38 for a major systems upgrade.",
+    playerImpact: false,
+    affectedByPlayer: false,
+  },
+
+  // ACT 4: MAJOR MOJAVE EVENTS UNFOLD
+  {
+    id: "boomer_nellis_test_fire",
+    day: 7,
+    hour: 13,
+    status: "pending",
+    description: "The Boomers test-fire their artillery at Nellis Air Force Base.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "brotherhood_elder_missing",
+    day: 8,
+    hour: 10,
+    status: "pending",
+    description: "The Brotherhood of Steel's Elder disappears, leading to internal strife.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_camp_forlorn_attack",
+    day: 10,
+    hour: 14,
+    status: "pending",
+    description: "Legion forces prepare a surprise attack on Camp Forlorn Hope.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // ACT 5: THE BATTLE APPROACHES
+  {
+    id: "yesman_activates",
+    day: 11,
+    hour: 9,
+    status: "pending",
+    description: "Rumors surface about a mysterious Securitron named Yes Man on the Strip.",
+    playerImpact: false,
+    affectedByPlayer: true,
+  },
+  {
+    id: "mrhouse_launches_robots",
+    day: 12,
+    hour: 11,
+    status: "pending",
+    description: "Mr. House launches a new wave of Securitron upgrades beneath the Lucky 38.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_marches_hooverdam",
+    day: 14,
+    hour: 7,
+    status: "pending",
+    description: "Caesar's Legion marches in force toward Hoover Dam.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "ncr_mobilizes_hooverdam",
+    day: 14,
+    hour: 10,
+    status: "pending",
+    description: "The NCR sends reinforcements to Hoover Dam, readying for a decisive battle.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "hoover_dam_battle_begins",
+    day: 15,
+    hour: 8,
+    status: "pending",
+    description: "The Second Battle of Hoover Dam erupts, drawing all major factions into conflict.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // ACT 6: ENDGAME—PLAYER CAN ALTER HISTORY
+  {
+    id: "platinum_chip_used",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "The Platinum Chip is used—its effect depends on who controls it.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+    // ==== VAULT EVENTS: Fallout New Vegas Canon Timeline ====
+  // Vault 3: Fiends
+  {
+    id: "vault3_fiends_takeover",
+    day: 0,
+    hour: 6,
+    status: "complete",
+    description: "Fiends violently overran Vault 3, driving out or killing its peaceful residents. It is now a base for chem-fueled raiders.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Vault 11: Sacrifice and Collapse
+  {
+    id: "vault11_final_vote",
+    day: -150, // Way before scenario start
+    hour: 12,
+    status: "complete",
+    description: "The final, tragic vote took place in Vault 11, ending with the last survivors refusing to sacrifice another and leaving only one survivor.",
+    playerImpact: false,
+    affectedByPlayer: false,
+  },
+  {
+    id: "vault11_suicide_note_discovered",
+    day: 3,
+    hour: 9,
+    status: "pending",
+    description: "Scavengers discover the suicide note and evidence of Vault 11's dark past.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Vault 19: Red vs. Blue
+  {
+    id: "vault19_conflict_erupts",
+    day: 5,
+    hour: 9,
+    status: "pending",
+    description: "Conflict between the Red and Blue sectors in Vault 19 escalates toward open violence.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "vault19_exodus",
+    day: 8,
+    hour: 18,
+    status: "pending",
+    description: "A mass exodus of Vault 19 residents occurs as the situation becomes unlivable.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Vault 21: Strip Integration
+  {
+    id: "vault21_casino_opening",
+    day: -200,
+    hour: 10,
+    status: "complete",
+    description: "Mr. House forced Vault 21 to surrender and converted it into a casino and hotel.",
+    playerImpact: false,
+    affectedByPlayer: false,
+  },
+  {
+    id: "vault21_beneath_the_casino",
+    day: 6,
+    hour: 12,
+    status: "pending",
+    description: "Rumors spread about secret rooms and hidden treasures beneath the Vault 21 casino.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Vault 22: Plant Outbreak
+  {
+    id: "vault22_plant_experiment",
+    day: -30,
+    hour: 8,
+    status: "complete",
+    description: "Vault 22's experiments led to aggressive plant growth and the spread of dangerous spores.",
+    playerImpact: false,
+    affectedByPlayer: false,
+  },
+  {
+    id: "vault22_research_team_missing",
+    day: 1,
+    hour: 16,
+    status: "pending",
+    description: "A research team sent to Vault 22 has not returned, sparking concern among the Followers of the Apocalypse.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Vault 34: Reactor Crisis
+  {
+    id: "vault34_radiation_leak",
+    day: -2,
+    hour: 15,
+    status: "complete",
+    description: "A critical radiation leak and failed reactor caused chaos in Vault 34, forcing many survivors to flee.",
+    playerImpact: false,
+    affectedByPlayer: false,
+  },
+  {
+    id: "vault34_survivor_group",
+    day: 3,
+    hour: 20,
+    status: "pending",
+    description: "Survivors from Vault 34 attempt to reach safety near the outskirts of the Vault.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "vault34_ncr_weapon_interest",
+    day: 7,
+    hour: 14,
+    status: "pending",
+    description: "NCR scouts investigate Vault 34's armory, seeking advanced weaponry.",
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  ];
+}
+
+
+// Track which events have been altered or triggered
+if (!state.world.timeline) state.world.timeline = JSON.parse(JSON.stringify(canonTimeline));
+
+// --- Time and Event Advance ---
+function advanceTimeline(hours = 1) {
+  // Advance world time
+  player.time.hour += hours;
+  while (player.time.hour >= 24) {
+    player.time.hour -= 24;
+    player.time.day += 1;
+  }
+
+  // Check events
+  state.world.timeline.forEach(ev => {
+    if (ev.status === "pending") {
+      if (
+        (player.time.day > ev.day) ||
+        (player.time.day === ev.day && player.time.hour >= ev.hour)
+      ) {
+        // If the player changed the event, run the altered outcome
+        if (ev.affectedByPlayer && ev.playerAltered) {
+          logAction(`[WORLD NEWS] ${ev.playerAltered}`);
+          ev.status = "altered";
+        } else {
+          logAction(`[WORLD NEWS] ${ev.description}`);
+          ev.status = "complete";
+        }
+        // Update rumors, radio, or NPC chatter here as needed
+      }
+    }
+  });
+}
+// Faction Events (add to your canonTimeline as you would vault/main events)
+const factionEvents = [
+  // --- NCR Questline ---
+   {
+    id: "ncr_primm_takeover",
+    day: 2,
+    hour: 10,
+    status: "pending",
+    description: "NCR troops debate moving into Primm to restore order.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 0 && !isHostile("NCR"),
+    mutuallyExclusive: ["Legion", "PowderGangers"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+  id: "ncr_outpost_patrols",
+    day: 2,
+    hour: 12,
+    status: "pending",
+    description: "The NCR Outpost organizes new patrols on the southern border.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 0,
+    mutuallyExclusive: ["Legion", "PowderGangers"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "ncr_nipton_report",
+    day: 3,
+    hour: 9,
+    status: "pending",
+    description: "NCR Rangers receive reports that Nipton has been destroyed by Caesar's Legion.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 0,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  // Camp Forlorn Hope (side/branch quests)
+  {
+    id: "ncr_forlorn_supply_shortage",
+    day: 4,
+    hour: 10,
+    status: "pending",
+    description: "Camp Forlorn Hope faces supply shortages and growing morale problems.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 0,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+   {
+    id: "ncr_forlorn_legion_attack",
+    day: 6,
+    hour: 14,
+    status: "pending",
+    description: "Legion prepares to attack Camp Forlorn Hope; NCR sends requests for support.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 10,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+   // Nelson
+  {
+    id: "ncr_retakes_nelson",
+    day: 5,
+    hour: 11,
+    status: "pending",
+    description: "NCR launches an assault to retake Nelson from the Legion.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 20,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "ncr_repconn_broadcast",
+    day: 4,
+    hour: 12,
+    status: "pending",
+    description: "NCR broadcasts victory at REPCONN headquarters.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 10,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+   // Vault 34 (optional NCR involvement)
+  {
+    id: "ncr_vault34_weapons_interest",
+    day: 7,
+    hour: 14,
+    status: "pending",
+    description: "NCR scouts investigate Vault 34, hoping to secure advanced weaponry.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 10,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  // McCarran Investigations & Quests
+  {
+    id: "ncr_mccarran_spy_hunt",
+    day: 8,
+    hour: 13,
+    status: "pending",
+    description: "NCR at Camp McCarran investigates possible Legion spies among their ranks.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 15,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "ncr_mccarran_great_khans_operation",
+    day: 8,
+    hour: 15,
+    status: "pending",
+    description: "NCR plans an operation against the Great Khans in Boulder City.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 15,
+    mutuallyExclusive: ["Legion", "GreatKhans"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "ncr_hooverdam_briefing",
+    day: 7,
+    hour: 10,
+    status: "pending",
+    description: "NCR holds a high-level briefing about the upcoming defense of Hoover Dam.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 25 && !isHostile("NCR"),
+    mutuallyExclusive: ["Legion", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  {
+    id: "ncr_offer_ranger_support",
+    day: 8,
+    hour: 9,
+    status: "pending",
+    description: "Rangers offer to support trusted NCR allies on special missions.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 50 && !isHostile("NCR"),
+    mutuallyExclusive: ["Legion", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+// Main Quest: For the Republic (pt. 2)
+  {
+    id: "ncr_for_the_republic2",
+    day: 11,
+    hour: 9,
+    status: "pending",
+    description: "NCR seeks a trusted agent to handle sensitive diplomatic and military tasks across the Strip.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 40,
+    mutuallyExclusive: ["Legion", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // NCR Hoover Dam Finale
+  {
+    id: "ncr_hoover_dam_final_defense",
+    day: 15,
+    hour: 7,
+    status: "pending",
+    description: "NCR mobilizes all available forces for the Second Battle of Hoover Dam.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 60,
+    mutuallyExclusive: ["Legion", "House", "YesMan"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Epilogue Event: NCR Outcome (player can alter with key choices)
+  {
+    id: "ncr_victory_hoover_dam",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "NCR declares victory at Hoover Dam—pending the player's influence, this event may change.",
+    faction: "NCR",
+    requirements: () => state.player.factionAlignment.NCR >= 80 && !isHostile("NCR"),
+    mutuallyExclusive: ["Legion", "House", "YesMan"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+ // Early Legion Activity
+  {
+    id: "legion_nipton_crucifixions",
+    day: 3,
+    hour: 7,
+    status: "pending",
+    description: "Legion executes Nipton’s residents as a warning to the Mojave.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 0,
+    mutuallyExclusive: ["NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_nelson_occupation",
+    day: 4,
+    hour: 10,
+    status: "pending",
+    description: "Legion secures Nelson and crucifies captured NCR troops.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 0,
+    mutuallyExclusive: ["NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  
+  // The Fort & Favors
+  {
+    id: "legion_slaves_arrive",
+    day: 5,
+    hour: 8,
+    status: "pending",
+    description: "A new group of slaves is marched into the Fort by Caesar's Legion.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 10,
+    mutuallyExclusive: ["NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_spy_mccarran",
+    day: 6,
+    hour: 16,
+    status: "pending",
+    description: "Legion agents plot the infiltration of Camp McCarran.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 15,
+    mutuallyExclusive: ["NCR", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Render Unto Caesar, Branches
+  {
+    id: "legion_render_unto_caesar",
+    day: 8,
+    hour: 9,
+    status: "pending",
+    description: "Caesar requests help for a secret mission within the Fort.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 25,
+    mutuallyExclusive: ["NCR", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_assassination_mission",
+    day: 9,
+    hour: 14,
+    status: "pending",
+    description: "Legion officers seek a trusted agent for an assassination in NCR territory.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 35,
+    mutuallyExclusive: ["NCR", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_eliminate_brotherhood",
+    day: 10,
+    hour: 12,
+    status: "pending",
+    description: "Legion taskmasters want the Brotherhood of Steel neutralized as a threat.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 45,
+    mutuallyExclusive: ["NCR", "House", "Brotherhood"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Mid-Game: Decisive Moves
+  {
+    id: "legion_battle_ready",
+    day: 12,
+    hour: 8,
+    status: "pending",
+    description: "Legion Centurions prepare for a decisive strike at Hoover Dam.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 60,
+    mutuallyExclusive: ["NCR", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_crush_khans",
+    day: 13,
+    hour: 10,
+    status: "pending",
+    description: "Caesar orders the extermination or subjugation of the Great Khans.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 60,
+    mutuallyExclusive: ["GreatKhans", "NCR", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Late Game: Endings
+  {
+    id: "legion_hooverdam_attack",
+    day: 15,
+    hour: 8,
+    status: "pending",
+    description: "Caesar's Legion launches its full-scale assault on Hoover Dam.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 80,
+    mutuallyExclusive: ["NCR", "House", "YesMan"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "legion_victory_ending",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "Legion claims victory at Hoover Dam and imposes order on the Mojave—unless the player interferes.",
+    faction: "Legion",
+    requirements: () => state.player.factionAlignment.Legion >= 90,
+    mutuallyExclusive: ["NCR", "House", "YesMan"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+   // Early Contact
+  {
+    id: "house_invitation",
+    day: 6,
+    hour: 10,
+    status: "pending",
+    description: "Mr. House sends a discreet invitation to his potential allies.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 0 && !isHostile("House"),
+    mutuallyExclusive: ["Legion", "NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_platinum_chip_interest",
+    day: 7,
+    hour: 8,
+    status: "pending",
+    description: "Mr. House expresses urgent interest in recovering the Platinum Chip.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 10,
+    mutuallyExclusive: ["Legion", "NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Strip Control & Diplomacy
+  {
+    id: "house_omerta_concern",
+    day: 8,
+    hour: 10,
+    status: "pending",
+    description: "Mr. House asks for help investigating the Omertas' suspicious activities on the Strip.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 20,
+    mutuallyExclusive: ["Legion", "NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_vip_mission",
+    day: 8,
+    hour: 11,
+    status: "pending",
+    description: "House requests assistance with a VIP delivery through the Strip.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 30,
+    mutuallyExclusive: ["Legion", "NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Faction Power Moves
+  {
+    id: "house_great_khans_offer",
+    day: 9,
+    hour: 13,
+    status: "pending",
+    description: "Mr. House considers brokering a deal with the Great Khans to neutralize them as a threat.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 40,
+    mutuallyExclusive: ["Legion", "NCR", "GreatKhans"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_brotherhood_demand",
+    day: 10,
+    hour: 9,
+    status: "pending",
+    description: "Mr. House insists on removing the Brotherhood of Steel presence in the Mojave.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 45,
+    mutuallyExclusive: ["Legion", "NCR", "Brotherhood"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Endgame
+  {
+    id: "house_securitron_upgrade",
+    day: 12,
+    hour: 16,
+    status: "pending",
+    description: "House upgrades the Securitron army beneath the Lucky 38 for ultimate Strip control.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 60,
+    mutuallyExclusive: ["Legion", "NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_defense_protocol",
+    day: 13,
+    hour: 7,
+    status: "pending",
+    description: "Mr. House readies the Lucky 38's Securitron army for a possible all-out war.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 70,
+    mutuallyExclusive: ["Legion", "NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_hooverdam_finale",
+    day: 15,
+    hour: 8,
+    status: "pending",
+    description: "Mr. House’s forces take their positions as the Second Battle of Hoover Dam begins.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 80,
+    mutuallyExclusive: ["Legion", "NCR", "YesMan"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "house_victory_ending",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "House claims victory at Hoover Dam and asserts dominion over New Vegas and the Mojave, unless the player changes the outcome.",
+    faction: "House",
+    requirements: () => state.player.factionAlignment.House >= 90,
+    mutuallyExclusive: ["Legion", "NCR", "YesMan"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+    // Yes Man Contact & Setup
+  {
+    id: "yesman_recruitment",
+    day: 7,
+    hour: 15,
+    status: "pending",
+    description: "A mysterious Securitron named Yes Man quietly seeks independent operators.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 0,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "yesman_strongholds_interest",
+    day: 8,
+    hour: 12,
+    status: "pending",
+    description: "Yes Man asks about your plans for dealing with the other Strip families and strongholds.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 10,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Major Faction Decisions
+  {
+    id: "yesman_tribe_survey",
+    day: 9,
+    hour: 14,
+    status: "pending",
+    description: "Yes Man suggests investigating and choosing the fate of every major tribe in the Mojave.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 20,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "yesman_upgrade_plan",
+    day: 11,
+    hour: 9,
+    status: "pending",
+    description: "Yes Man reveals plans to upgrade the entire Securitron army if given the opportunity.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 35,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "yesman_strip_shutdown",
+    day: 12,
+    hour: 13,
+    status: "pending",
+    description: "Yes Man proposes a plan to secure the Strip and prepare for independence from all outside powers.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 45,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Endgame
+  {
+    id: "yesman_finale_preparation",
+    day: 14,
+    hour: 7,
+    status: "pending",
+    description: "Yes Man initiates preparations for the Battle of Hoover Dam on your terms.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 70,
+    mutuallyExclusive: ["NCR", "Legion", "House"], // By endgame, must be independent (not aligned with other powers)
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "yesman_hooverdam_takeover",
+    day: 15,
+    hour: 8,
+    status: "pending",
+    description: "With the other powers in chaos, Yes Man's Securitron army takes control of the Dam—unless the player chooses otherwise.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 85,
+    mutuallyExclusive: ["NCR", "Legion", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "yesman_victory_ending",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "Yes Man installs a new, independent order in New Vegas and the Mojave, guided by the player's choices.",
+    faction: "YesMan",
+    requirements: () => state.player.factionAlignment.YesMan >= 95,
+    mutuallyExclusive: ["NCR", "Legion", "House"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // First Contact & Trust Building
+  {
+    id: "boomers_first_contact",
+    day: 3,
+    hour: 10,
+    status: "pending",
+    description: "Boomers fire warning shots at outsiders approaching Nellis Air Force Base.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 0,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "boomers_gift_request",
+    day: 5,
+    hour: 12,
+    status: "pending",
+    description: "The Boomers ask for rare parts and medical supplies to maintain their self-sufficiency.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 10,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Initiation & Acceptance
+  {
+    id: "boomers_history_lesson",
+    day: 7,
+    hour: 10,
+    status: "pending",
+    description: "The Boomers invite trusted outsiders to hear their history in the Nellis museum.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 15,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "boomers_tribal_test",
+    day: 8,
+    hour: 13,
+    status: "pending",
+    description: "The Boomers ask for help fending off wildlife and assisting the children of Nellis.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 20,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Major Quest: The Bomber
+  {
+    id: "boomers_plane_recovery",
+    day: 9,
+    hour: 17,
+    status: "pending",
+    description: "Boomers seek aid in recovering a crashed bomber from Lake Mead.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 25,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "boomers_bomber_success",
+    day: 11,
+    hour: 8,
+    status: "pending",
+    description: "The Boomers, with outside help, restore their bomber and celebrate their achievement.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 35,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Final Influence: Choosing Sides
+  {
+    id: "boomers_hooverdam_support_decision",
+    day: 13,
+    hour: 12,
+    status: "pending",
+    description: "The Boomers decide whether to support NCR, Legion, House, Yes Man, or remain isolated at the Battle of Hoover Dam.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 45,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "boomers_finale_outcome",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "The Boomers' bomber tips the balance at Hoover Dam for their chosen ally—or they fade back into the desert, legend intact.",
+    faction: "Boomers",
+    requirements: () => state.player.factionAlignment.Boomers >= 55,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+ // Discovery & First Contact
+  {
+    id: "bos_hidden_valley_meeting",
+    day: 5,
+    hour: 14,
+    status: "pending",
+    description: "Rumors circulate about a secret Brotherhood bunker near Hidden Valley.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 0,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "bos_initiate_ordeal",
+    day: 6,
+    hour: 11,
+    status: "pending",
+    description: "The Brotherhood tests outsiders with a hazardous task to prove worth.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 5,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Trust & Advancement
+  {
+    id: "bos_elders_challenge",
+    day: 8,
+    hour: 13,
+    status: "pending",
+    description: "The Elder of the Brotherhood challenges you to retrieve rare technology.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 15,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "bos_power_armor_test",
+    day: 10,
+    hour: 12,
+    status: "pending",
+    description: "The Brotherhood tests prototype power armor deep within their bunker.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 25,
+    mutuallyExclusive: ["NCR", "Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "bos_stealth_boy_conflict",
+    day: 11,
+    hour: 9,
+    status: "pending",
+    description: "A schism erupts over the Brotherhood’s use of Stealth Boys, causing internal tension.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 30,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Late Game: Choosing Sides & Survival
+  {
+    id: "bos_side_choice",
+    day: 13,
+    hour: 10,
+    status: "pending",
+    description: "The Brotherhood requests help deciding their stance: war, peace, or withdrawal from the Mojave.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 40,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "bos_ncr_legion_demand_elimination",
+    day: 14,
+    hour: 13,
+    status: "pending",
+    description: "NCR and Legion demand the elimination of the Brotherhood as the battle for the Mojave nears.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 50,
+    mutuallyExclusive: ["NCR", "Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Endings
+  {
+    id: "bos_finale_survival",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "The Brotherhood either survives in secret, sides with the winner, or is destroyed—depending on your choices.",
+    faction: "Brotherhood",
+    requirements: () => state.player.factionAlignment.Brotherhood >= 60,
+    mutuallyExclusive: ["NCR", "Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Red Rock Family
+  {
+    id: "khans_family_meeting",
+    day: 4,
+    hour: 17,
+    status: "pending",
+    description: "The Great Khans gather at Red Rock Canyon to discuss their future.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 0,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "khans_diplomatic_mission",
+    day: 6,
+    hour: 12,
+    status: "pending",
+    description: "The Khans send out feelers for alliances—NCR, Legion, House, or independence.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 10,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Alliance Possibilities & Power Struggles
+  {
+    id: "khans_alliance_offer",
+    day: 8,
+    hour: 16,
+    status: "pending",
+    description: "Khans consider an alliance with an outside faction, if approached diplomatically.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 20,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "khans_benny_connection",
+    day: 9,
+    hour: 11,
+    status: "pending",
+    description: "The Khans debate what to do about Benny and the fate of the old deal at Boulder City.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 20,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Quest for a Home
+  {
+    id: "khans_exodus_preparation",
+    day: 11,
+    hour: 14,
+    status: "pending",
+    description: "The Khans begin preparing for a possible exodus from the Mojave if things go bad.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 30,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Endgame: Fate of the Khans
+  {
+    id: "khans_battle_hooverdam_decision",
+    day: 14,
+    hour: 8,
+    status: "pending",
+    description: "The Great Khans must choose: fight at Hoover Dam, flee east, or carve out independence.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 35,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "khans_finale_outcome",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "The Great Khans either die at Hoover Dam, join a new power, or begin a new legacy beyond the Mojave, based on player influence.",
+    faction: "GreatKhans",
+    requirements: () => state.player.factionAlignment.GreatKhans >= 40,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+ // Early: Expansion & Aid
+  {
+    id: "followers_open_clinic",
+    day: 2,
+    hour: 14,
+    status: "pending",
+    description: "The Followers of the Apocalypse open a new free clinic in Freeside.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 0,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "followers_king_alliance",
+    day: 4,
+    hour: 11,
+    status: "pending",
+    description: "The Followers reach out to the Kings for mutual support and protection in Freeside.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 5,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Research, Supplies, Side Quests
+  {
+    id: "followers_research_request",
+    day: 6,
+    hour: 13,
+    status: "pending",
+    description: "The Followers request rare medical supplies for their research.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 15,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "followers_vaccine_trial",
+    day: 7,
+    hour: 10,
+    status: "pending",
+    description: "The Followers begin a risky new vaccine trial against desert plague.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 18,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "followers_omerta_trouble",
+    day: 8,
+    hour: 14,
+    status: "pending",
+    description: "The Omertas threaten the Followers' work in Freeside, seeking protection money.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 20,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Mid-Late: Influence, Fallout
+  {
+    id: "followers_bunker_project",
+    day: 10,
+    hour: 12,
+    status: "pending",
+    description: "Followers ask for help securing a secret research bunker on the edge of New Vegas.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 25,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "followers_ncr_donation",
+    day: 11,
+    hour: 15,
+    status: "pending",
+    description: "NCR offers a major medical donation—if the Followers back their side at Hoover Dam.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 28 && state.player.factionAlignment.NCR >= 20,
+    mutuallyExclusive: ["Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Endgame: Fate of the Followers
+  {
+    id: "followers_hooverdam_aid_decision",
+    day: 14,
+    hour: 9,
+    status: "pending",
+    description: "The Followers must decide whether to aid refugees during the final battle or evacuate Freeside.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 30,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "followers_finale_outcome",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "The Followers either expand their aid, are wiped out, or go underground—depending on your influence and who controls the Mojave.",
+    faction: "Followers",
+    requirements: () => state.player.factionAlignment.Followers >= 35,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // The Prison Break & Early Raids
+  {
+    id: "powder_gangers_prison_break",
+    day: 0,
+    hour: 2,
+    status: "complete", // this usually happens at scenario start
+    description: "Powder Gangers escape NCR Correctional Facility and begin raiding the Mojave.",
+    faction: "PowderGangers",
+    requirements: () => true, // Always fires at start
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "powder_gangers_goodsprings_threat",
+    day: 2,
+    hour: 15,
+    status: "pending",
+    description: "Powder Gangers threaten Goodsprings, demanding tribute or blood.",
+    faction: "PowderGangers",
+    requirements: () => state.player.factionAlignment.PowderGangers >= 5,
+    mutuallyExclusive: ["NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Midgame: Raids, Growth, and Collapse
+  {
+    id: "powder_gangers_raid_ncr",
+    day: 3,
+    hour: 7,
+    status: "pending",
+    description: "Powder Gangers plan a raid on a vulnerable NCR supply convoy.",
+    faction: "PowderGangers",
+    requirements: () => state.player.factionAlignment.PowderGangers >= 10,
+    mutuallyExclusive: ["NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "powder_gangers_nelson_ambush",
+    day: 5,
+    hour: 12,
+    status: "pending",
+    description: "Powder Gangers ambush NCR patrols near Nelson, seeking a foothold in Legion territory.",
+    faction: "PowderGangers",
+    requirements: () => state.player.factionAlignment.PowderGangers >= 15,
+    mutuallyExclusive: ["NCR", "Legion"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "powder_gangers_internal_conflict",
+    day: 7,
+    hour: 15,
+    status: "pending",
+    description: "The Powder Gangers face a leadership crisis as rival gangs vie for control.",
+    faction: "PowderGangers",
+    requirements: () => state.player.factionAlignment.PowderGangers >= 20,
+    mutuallyExclusive: ["NCR"],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+
+  // Endgame: Fate of the Powder Gangers
+  {
+    id: "powder_gangers_split",
+    day: 11,
+    hour: 13,
+    status: "pending",
+    description: "The Powder Gangers split—some join raiders or Legion, others attempt peace or scatter into the wastes.",
+    faction: "PowderGangers",
+    requirements: () => state.player.factionAlignment.PowderGangers >= 25,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+  {
+    id: "powder_gangers_finale_outcome",
+    day: 16,
+    hour: 8,
+    status: "pending",
+    description: "The Powder Gangers are either destroyed, assimilated, or carve out a small, unstable domain—based on player choices.",
+    faction: "PowderGangers",
+    requirements: () => state.player.factionAlignment.PowderGangers >= 30,
+    mutuallyExclusive: [],
+    playerImpact: true,
+    affectedByPlayer: true,
+  },
+];
+
+// =======================
+//       HELPERS
+// =======================
+
+function logAction(desc) {
+    if (!player.actionsLog) player.actionsLog = [];
+    if (!player.time) player.time = { day: 1, hour: 8 };
+    player.actionsLog.push(`[Day ${player.time.day}, ${player.time.hour}:00] ${desc}`);
+  }
+
+  function addItem(item) {
+    player.inventory.push(item);
+    logAction(`Acquired ${item}`);
+  }
+  function removeItem(item) {
+    const idx = player.inventory.indexOf(item);
+    if (idx !== -1) {
+      player.inventory.splice(idx, 1);
+      logAction(`Removed ${item}`);
+      return true;
+    }
+    return false;
+  }
+  function hasItem(item) {
+    return player.inventory.includes(item);
+  }
+
+  // === Companions ===
+  function addCompanion(name, uniqueTag = null) {
+    if (player.companions.find(c => c.name === name)) {
+      logAction(`${name} is already your companion.`);
+      return false;
+    }
+    player.companions.push({
+      name: name,
+      status: "active",
+      trust: 50,
+      uniqueTag: uniqueTag
+    });
+    logAction(`${name} has joined you as a companion!`);
+    return true;
+  }
+  function removeCompanion(name) {
+    const idx = player.companions.findIndex(c => c.name === name);
+    if (idx !== -1) {
+      player.companions.splice(idx, 1);
+      logAction(`${name} has left your party.`);
+      return true;
+    }
+    logAction(`You have no companion named ${name}.`);
+    return false;
+  }
+  function changeCompanionTrust(name, amount) {
+    const c = player.companions.find(c => c.name === name);
+    if (!c) return;
+    c.trust = Math.max(0, Math.min(100, c.trust + amount));
+    logAction(`${name}'s trust is now ${c.trust}.`);
+  }
+  function recruitCompanion(uniqueTag) {
+    const npc = world.companions.find(c => c.uniqueTag === uniqueTag);
+    if (!npc) return;
+    npc.status = "with_player";
+    npc.location = "with_player";
+    addCompanion(npc.name, npc.uniqueTag);
+  }
+  function dismissCompanion(uniqueTag, toLocation) {
+    const npc = world.companions.find(c => c.uniqueTag === uniqueTag);
+    if (!npc) return;
+    npc.status = "available";
+    npc.location = toLocation;
+    removeCompanion(npc.name);
+    logAction(`${npc.name} has returned to ${toLocation}.`);
+  }
+
+  // === Currency ===
+  function addCaps(amount) {
+    player.caps += amount;
+    logAction(`You gained ${amount} caps.`);
+  }
+  function removeCaps(amount) {
+    if (player.caps >= amount) {
+      player.caps -= amount;
+      logAction(`You spent ${amount} caps.`);
+      return true;
+    } else {
+      logAction("Not enough caps!");
+      return false;
+    }
+  }
+  function hasCaps(amount) {
+    return player.caps >= amount;
+  }
+
+  // === Gambling & Casino ===
+  function exchangeCapsForChips(casino, amount) {
+    if (player.caps >= amount) {
+      player.caps -= amount;
+      player.casinoChips[casino] = (player.casinoChips[casino] || 0) + amount;
+      logAction(`Exchanged ${amount} caps for ${amount} ${casino} chips.`);
+      return true;
+    }
+    logAction(`Not enough caps to exchange for ${casino} chips.`);
+    return false;
+  }
+  function exchangeChipsForCaps(casino, amount) {
+    if ((player.casinoChips[casino] || 0) >= amount) {
+      player.casinoChips[casino] -= amount;
+      player.caps += amount;
+      logAction(`Exchanged ${amount} ${casino} chips for ${amount} caps.`);
+      return true;
+    }
+    logAction(`Not enough ${casino} chips to exchange.`);
+    return false;
+  }
+
+  function playSlots(casino = "Tops") {
+    if (!player.factionMembership[casino]) {
+      logAction(`You're banned from the ${casino} and cannot play.`);
+      return;
+    }
+    if ((player.casinoChips[casino] || 0) < 10) {
+      logAction(`Not enough ${casino} chips to play the slots.`);
+      return;
+    }
+    player.casinoChips[casino] -= 10;
+    let roll = Math.random();
+    if (roll < 0.02) {
+      let win = 500 + Math.floor(Math.random() * 500);
+      player.casinoChips[casino] += win;
+      changeAlignment(casino, 10);
+      logAction(`JACKPOT! You won ${win} ${casino} chips at the slots.`);
+      checkCasinoBan(casino, win);
+    } else if (roll < 0.14) {
+      let win = 50 + Math.floor(Math.random() * 50);
+      player.casinoChips[casino] += win;
+      changeAlignment(casino, 2);
+      logAction(`You won ${win} ${casino} chips at the slots!`);
+      checkCasinoBan(casino, win);
+    } else {
+      logAction(`You lost at the slots in the ${casino}.`);
+      changeAlignment(casino, -1);
+    }
+  }
+  function playBlackjack(bet = 10, casino = "Tops") {
+    if (!player.factionMembership[casino]) {
+      logAction(`You're banned from the ${casino} and cannot play.`);
+      return;
+    }
+    if ((player.casinoChips[casino] || 0) < bet) {
+      logAction(`Not enough ${casino} chips to play blackjack.`);
+      return;
+    }
+    player.casinoChips[casino] -= bet;
+    let roll = Math.random();
+    if (roll < 0.4) {
+      player.casinoChips[casino] += bet * 2;
+      changeAlignment(casino, 5);
+      logAction(`Blackjack win! You won ${bet * 2} ${casino} chips.`);
+      checkCasinoBan(casino, bet * 2);
+    } else if (roll < 0.48) {
+      player.casinoChips[casino] += bet;
+      logAction(`Blackjack tie. You get your ${bet} ${casino} chips back.`);
+    } else {
+      logAction(`You lost at blackjack in the ${casino}.`);
+      changeAlignment(casino, -1);
+    }
+  }
+  function playRoulette(bet = 10, color = "red", casino = "Tops") {
+    if (!player.factionMembership[casino]) {
+      logAction(`You're banned from the ${casino} and cannot play.`);
+      return;
+    }
+    if ((player.casinoChips[casino] || 0) < bet) {
+      logAction(`Not enough ${casino} chips to play roulette.`);
+      return;
+    }
+    player.casinoChips[casino] -= bet;
+    let roll = Math.floor(Math.random() * 38);
+    let win = false;
+    if (color === "red" && roll >= 1 && roll <= 18) win = true;
+    else if (color === "black" && roll >= 19 && roll <= 36) win = true;
+    else if (color === "green" && (roll === 0 || roll === 37)) win = true;
+
+    if (win) {
+      let payout = color === "green" ? bet * 17 : bet * 2;
+      player.casinoChips[casino] += payout;
+      changeAlignment(casino, 4);
+      logAction(`Roulette win! You won ${payout} ${casino} chips betting on ${color}.`);
+      checkCasinoBan(casino, payout);
+    } else {
+      logAction(`You lost your ${bet} ${casino} chips betting on ${color} at roulette.`);
+      changeAlignment(casino, -1);
+    }
+  }
+  function checkCasinoBan(casino, winAmount) {
+    if (!player.casinoWinnings[casino]) player.casinoWinnings[casino] = 0;
+    player.casinoWinnings[casino] += winAmount;
+    if (player.casinoWinnings[casino] >= 10000) {
+      player.factionMembership[casino] = false; // Banned!
+      logAction(`You won too much at the ${casino} and have been banned!`);
+      changeAlignment(casino, -100);
+    }
+  }
+  function unbanFromCasino(casino, method = "bribe") {
+    if (player.factionMembership[casino]) {
+      logAction(`You're not banned from the ${casino}.`);
+      return;
+    }
+    if (method === "bribe") {
+      if (player.caps >= 2000) {
+        player.caps -= 2000;
+        player.factionMembership[casino] = true;
+        player.casinoWinnings[casino] = 0;
+        logAction(`You slipped 2,000 caps to a pit boss at the ${casino}. You're welcome back—*but don't win too much.*`);
+      } else {
+        logAction(`You need 2,000 caps to bribe your way back into the ${casino}.`);
+      }
+    } else if (method === "quest") {
+      player.factionMembership[casino] = true;
+      player.casinoWinnings[casino] = 0;
+      logAction(`You've been unbanned from the ${casino} after helping out!`);
+    } else if (method === "invest") {
+      if (player.caps >= 5000) {
+        player.caps -= 5000;
+        player.factionMembership[casino] = true;
+        player.casinoWinnings[casino] = 0;
+        logAction(`You invested 5,000 caps into the ${casino}'s improvements and earned another shot!`);
+      } else {
+        logAction(`You need 5,000 caps to invest in the ${casino}.`);
+      }
+    }
+  }
+
+  function changeAlignment(faction, amount) {
+    player.reputation[faction] = (player.reputation[faction] || 0) + amount;
+  }
+
+// === DLC: Dead Money / Sierra Madre ===
+
+// --- Core Trigger & Entry ---
+function triggerSierraMadre() {
+  if (!player.unlockedDLCs) player.unlockedDLCs = {};
+  player.unlockedDLCs.sierraMadre = true;
+  logAction("A mysterious radio transmission beckons you to the Sierra Madre Casino...");
+}
+function travelToSierraMadre() {
+  if (!player.unlockedDLCs || !player.unlockedDLCs.sierraMadre) {
+    logAction("You haven't discovered the Sierra Madre yet.");
+    return;
+  }
+  changeLocation("Sierra Madre Casino");
+  player.inSierraMadre = true;
+  player.sierraMadreQuest = { started: true, completed: false, companions: ["Dog/God", "Dean Domino", "Christine"] };
+  attachBombCollar();
+  stripPlayerForDLC();
+  logAction("You awaken in the Villa, a bomb collar locked to your neck. Find Dog, Dean Domino, and Christine if you hope to survive Father Elijah's deadly game...");
+}
+
+// --- Bomb Collar Logic ---
+function attachBombCollar() {
+  player.hasBombCollar = true;
+  player.collarStatus = { active: true, beeping: false, aboutToExplode: false, timer: 0 };
+  logAction("A bomb collar is locked around your neck. Stay alert for beeping—danger is close.");
+}
+function startBeeping(reason = "danger") {
+  if (player.hasBombCollar && player.collarStatus.active) {
+    player.collarStatus.beeping = true;
+    player.collarStatus.timer = 2; // e.g. 2 "turns" before detonation
+    logAction(`Your collar starts beeping rapidly! ${reason === "speaker" ? "A hidden speaker is nearby!" : ""}`);
+  }
+}
+function tickBombCollar() {
+  if (player.hasBombCollar && player.collarStatus.beeping && player.collarStatus.active) {
+    player.collarStatus.timer -= 1;
+    if (player.collarStatus.timer <= 0) detonateCollar("You failed to escape the danger in time!");
+    else logAction("The collar's beeping grows faster...");
+  }
+}
+function stopBeeping() {
+  if (player.hasBombCollar && player.collarStatus.beeping) {
+    player.collarStatus.beeping = false;
+    player.collarStatus.timer = 0;
+    logAction("The beeping stops. You are safe—for now.");
+  }
+}
+function detonateCollar(reason = "unknown") {
+  if (player.hasBombCollar && player.collarStatus.active) {
+    player.collarStatus.active = false;
+    logAction(`💥 Your collar explodes (${reason})! YOU ARE DEAD.`);
+    player.inSierraMadre = false;
+    player.isDead = true;
+  }
+}
+function disarmCollar() {
+  if (player.hasBombCollar) {
+    player.collarStatus.active = false;
+    player.hasBombCollar = false;
+    logAction("You successfully disarm and remove your bomb collar!");
+  }
+}
+
+// --- Supplies/Chips ---
+function stripPlayerForDLC() {
+  if (!player.inventory) player.inventory = [];
+  // Save previous inventory for restoration later (optional)
+  player.preDLCInventory = player.inventory.slice();
+  player.inventory = ["Basic Clothing", "Quest Item"]; // or whatever minimal items
+  player.sierraMadreChips = 0;
+  player.hp = 100;
+  logAction("Your equipment has been taken! Only basic supplies remain.");
+}
+function restoreInventoryAfterDLC() {
+  if (player.preDLCInventory) {
+    player.inventory = player.preDLCInventory.slice();
+    delete player.preDLCInventory;
+    logAction("Your lost equipment is restored after your escape from the Sierra Madre.");
+  }
+}
+function addSierraMadreChips(amount) {
+  player.sierraMadreChips = (player.sierraMadreChips || 0) + amount;
+  logAction(`You found ${amount} Sierra Madre chips.`);
+}
+function spendSierraMadreChips(amount) {
+  if ((player.sierraMadreChips || 0) >= amount) {
+    player.sierraMadreChips -= amount;
+    logAction(`You spent ${amount} Sierra Madre chips.`);
+    return true;
+  }
+  logAction("Not enough chips!");
+  return false;
+}
+
+// --- Fog Damage ---
+function inFogArea() {
+  if (!player.hp) player.hp = 100;
+  logAction("You are enveloped in poisonous fog! Your lungs burn...");
+  player.hp -= 10;
+  if (player.hp <= 0) {
+    detonateCollar("succumbed to the fog");
+  }
+}
+
+// --- Speaker Traps (Call this when entering a speaker zone) ---
+function enterSpeakerZone() {
+  startBeeping("speaker");
+}
+function leaveSpeakerZone() {
+  stopBeeping();
+}
+
+function addSierraMadreCompanion(name) {
+  if (!player.companions) player.companions = [];
+  if (!player.companions.find(c => c.name === name)) {
+    player.companions.push({name: name, status: "active", dlc: "Dead Money"});
+    logAction(`${name} has joined you in your struggle for survival.`);
+  }
+}
+function removeSierraMadreCompanions() {
+  if (!player.companions) return;
+  player.companions = player.companions.filter(
+    c => !["Dog/God", "Dean Domino", "Christine"].includes(c.name)
+  );
+}
+function markSierraMadreCompanionHelped(name) {
+  if (!player.sierraMadreQuest) player.sierraMadreQuest = {};
+  if (!player.sierraMadreQuest.companionsHelped) player.sierraMadreQuest.companionsHelped = {};
+  player.sierraMadreQuest.companionsHelped[name] = true;
+}
+function storeMojaveCompanions() {
+  player.preDLCCompanions = player.companions ? player.companions.slice() : [];
+  player.companions = []; // Remove for Dead Money
+}
+function restoreMojaveCompanions() {
+  if (player.preDLCCompanions) {
+    player.companions = player.preDLCCompanions.slice();
+    delete player.preDLCCompanions;
+    logAction("Your original companions are now able to rejoin you.");
+  }
+}
+function setCompanionStatus(name, status) {
+  if (!player.sierraMadreQuest) player.sierraMadreQuest = {};
+  if (!player.sierraMadreQuest.companionStatus) player.sierraMadreQuest.companionStatus = {};
+  player.sierraMadreQuest.companionStatus[name] = status; // e.g. "alive", "dead", "escaped"
+}
+
+
+// --- Ghost People Encounters ---
+function encounterGhostPerson(options = {}) {
+  // Options: { auto: false, playerWeapon: "", skill: "" }
+  const auto = options.auto || false; // set to true for random events
+  const playerWeapon = options.playerWeapon || "melee"; // or "gun", "explosive"
+  const skill = options.skill || 50; // e.g., player's relevant combat skill
+
+  logAction("A Ghost Person emerges from the mist, its hazmat suit hissing. Only a headshot or dismemberment will keep it down for good...");
+
+  let hitChance = 0.5 + (skill - 50) * 0.01; // skill 50 = 50%, skill 70 = 70%
+  if (playerWeapon === "gun") hitChance += 0.1;
+  if (playerWeapon === "explosive") hitChance -= 0.2; // Not effective!
+  if (playerWeapon === "melee") hitChance += 0.05;
+
+  if (Math.random() < hitChance) {
+    // Successful takedown
+    if (Math.random() < 0.5 || playerWeapon === "gun") {
+      logAction("You score a direct headshot/dismemberment! The Ghost Person stays down.");
+      addSierraMadreChips(5 + Math.floor(Math.random()*5)); // Loot!
+      // Maybe rare loot or safe passage
+    } else {
+      logAction("You drop the Ghost Person—but it begins to twitch, rising again!");
+      // Option to attack again, or take damage
+      if (!auto) player.hp -= 10;
+      logAction("The Ghost Person claws at you as you try to finish the job!");
+      // Could loop for another attempt, or auto-escape if needed
+    }
+  } else {
+    logAction("Your attack glances off the Ghost Person's suit! It slashes at you with its claws.");
+    player.hp -= 20;
+    // If hp drops to zero, detonate collar
+    if (player.hp <= 0) detonateCollar("killed by Ghost People");
+  }
+}
+
+// --- Quest Progress & Steps ---
+function updateSierraMadreQuest(stage) {
+  if (!player.sierraMadreQuest) player.sierraMadreQuest = {};
+  player.sierraMadreQuest.stage = stage;
+  logAction(`Quest updated: ${stage}`);
+}
+function completeSierraMadreQuest() {
+  player.sierraMadreQuest.completed = true;
+  player.inSierraMadre = false;
+  disarmCollar();
+  removeSierraMadreCompanions();
+  restoreInventoryAfterDLC();
+  logAction("You escaped the Sierra Madre! You are free to travel again.");
+}
+// --- Dead Money Vault Finale Sequence ---
+
+function sierraMadreVaultFinale() {
+  if (!player.sierraMadreQuest.started || player.sierraMadreQuest.completed) {
+    logAction("You’re not at the finale yet!");
+    return;
+  }
+  logAction("You stand in the vault, gold bars glittering all around. The radio crackles—Father Elijah is on his way. The collar on your neck feels heavy.");
+
+  // Let the player choose their approach (pseudo-choice, adapt as you wish)
+  // Option 1: Grab as many gold bars as you can (risk being caught)
+  // Option 2: Escape safely with less/no gold
+  // Option 3: Set a trap for Elijah
+
+  // Here, we'll give the player a choice—replace with your text adventure system’s input method
+  logAction("Options: \n1. Try to grab ALL the gold and sneak out (hardest)\n2. Take a few gold bars and slip away safely\n3. Lure Elijah into a trap and lock him in the Vault\n4. Leave everything and escape quickly.");
+
+  // For demo: use a parameter, or set up a prompt in your game engine
+}
+
+function resolveVaultChoice(choice) {
+  // choice = 1, 2, 3, or 4
+  let baseWeight = 35; // Each gold bar is ~35 lbs. in FNV. Limit by player "strength" or a flat max.
+  let maxBars = 2 + Math.floor((player.strength || 5) / 2); // Example: allow more bars with higher STR
+  let escapeChance = 0.25; // Low chance with full loot
+
+  switch (choice) {
+    case 1: // Take ALL gold
+      if (player.strength >= 10) {
+        player.goldBars = 37;
+        logAction("You stuff your pack with every gold bar! You're heavily encumbered. Escaping will be nearly impossible...");
+        if (Math.random() < escapeChance) {
+          logAction("Against all odds, you slip out before Elijah traps you. You escape the Sierra Madre with a FORTUNE in gold!");
+          completeSierraMadreQuest();
+        } else {
+          logAction("Elijah arrives before you can escape. The collar’s beeping grows louder...");
+          detonateCollar("caught while stealing all the gold");
+        }
+      } else {
+        logAction("You can’t possibly carry all the gold with your current strength!");
+      }
+      break;
+    case 2: // Take a few bars
+      let barsTaken = Math.min(5, maxBars);
+      player.goldBars = barsTaken;
+      logAction(`You take ${barsTaken} gold bars—enough to change your life, but not enough to slow you down much.`);
+      logAction("You sneak out a side exit while Elijah searches the Vault for you.");
+      completeSierraMadreQuest();
+      break;
+    case 3: // Lure Elijah, trap him
+      logAction("You set a trap, luring Elijah into the Vault. You lock the door behind him. With the path clear, you have time to grab more gold...");
+      player.goldBars = Math.min(15, maxBars * 2);
+      logAction(`You take ${player.goldBars} gold bars and escape as Elijah’s rage echoes behind the Vault door.`);
+      completeSierraMadreQuest();
+      break;
+    case 4: // Leave empty-handed
+      logAction("You leave the gold behind and focus on escaping. Freedom is worth more than wealth—or so you tell yourself...");
+      completeSierraMadreQuest();
+      break;
+    default:
+      logAction("You hesitate, time is running out!");
+  }
+}
+
+// === UNIVERSAL INTENT HANDLER ===
+function handleIntent(intent, options = {}) {
+  // Example: intent = "get_gold_bars" or "escape_sierra_madre"
+  // options = { with: "Dog/God", at: "Vault", ... }
+
+  // ==== SIERRA MADRE/GOLD LOGIC ====
+  if (intent === "get_gold_bars") {
+    if (!player.sierraMadreQuest || !player.sierraMadreQuest.started) {
+      logAction("Dean Domino snorts: 'Maybe focus on not dying first, then worry about riches.'");
+      return;
+    }
+    if (!player.location || player.location !== "Sierra Madre Vault") {
+      logAction("Christine shakes her head: 'The gold's deep in the Vault. We need to reach it, then worry about carrying it out alive.'");
+      return;
+    }
+    // If in Vault: trigger vault sequence!
+    sierraMadreVaultFinale();
+    return;
+  }
+
+  // ==== ESCAPE SIERRA MADRE ====
+  if (intent === "escape_sierra_madre") {
+    if (!player.inSierraMadre) {
+      logAction("You're not trapped in the Sierra Madre right now.");
+      return;
+    }
+    if (!player.sierraMadreQuest || !player.sierraMadreQuest.completed) {
+      logAction("The casino's grip is ironclad. You’ll have to finish the job—or die trying.");
+      return;
+    }
+    logAction("You sprint for the exit, collar now silent. You're free!");
+    completeSierraMadreQuest();
+    return;
+  }
+
+  // ==== TALK TO COMPANIONS ====
+  if (intent === "talk_to_companion") {
+    const companion = options.with || "";
+    if (!player.sierraMadreQuest || !player.sierraMadreQuest.companions.includes(companion)) {
+      logAction(`There's no one named ${companion} here.`);
+      return;
+    }
+    logAction(`You talk to ${companion}. They eye you warily, waiting for your next move...`);
+    // (Insert companion-specific interaction logic here)
+    return;
+  }
+
+  // ==== HELP COMPANION ====
+  if (intent === "help_companion") {
+    const companion = options.with || "";
+    if (!player.sierraMadreQuest || !player.sierraMadreQuest.companions.includes(companion)) {
+      logAction(`You can't help ${companion}; they're not here.`);
+      return;
+    }
+    markSierraMadreCompanionHelped(companion);
+    logAction(`You help ${companion} with their troubles. Their trust in you grows.`);
+    return;
+  }
+
+  // ==== PICK UP GOLD (loose bars) ====
+  if (intent === "pick_up_gold_bar") {
+    if (player.location !== "Sierra Madre Vault") {
+      logAction("No gold bars here. You’ll have to find the Vault.");
+      return;
+    }
+    player.goldBars = (player.goldBars || 0) + 1;
+    logAction("You heft a gold bar into your pack. It weighs a ton—but it gleams like hope.");
+    return;
+  }
+
+  // ==== DEFAULT / UNKNOWN INTENT ====
+  logAction("You can't do that right now.");
+}
+
+// --- Prevent Leaving DLC Area ---
+function changeLocation(newLoc) {
+  if (!player.visitedLocations) player.visitedLocations = [];
+  if (player.inSierraMadre && !["Sierra Madre Casino", "Villa", "Fountain", "Sierra Madre Vault"].includes(newLoc)) {
+    logAction("You can’t leave the Sierra Madre until you complete its deadly challenge.");
+    return;
+  }
+  if (player.location !== newLoc) {
+    player.location = newLoc;
+    if (!player.visitedLocations.includes(newLoc)) {
+      player.visitedLocations.push(newLoc);
+    }
+    logAction(`Traveled to ${newLoc}`);
+  }
+}
+
+
+// ========== SURVIVAL/NEEDS/TIME ==========
+function advanceTime(hours = 1) {
+  player.time.hour += hours;
+  while (player.time.hour >= 24) {
+    player.time.hour -= 24;
+    player.time.day += 1;
+  }
+  player.fatigue = Math.min(player.fatigue + hours * 10, 100);
+  player.hunger = Math.min(player.hunger + hours * 5, 100);
+  player.thirst = Math.min(player.thirst + hours * 8, 100);
+  logAction(`Time advanced by ${hours} hour(s). Now: Day ${player.time.day}, ${player.time.hour}:00.`);
+  advanceAllEvents(hours); // <<---- This triggers event advancement!
+}
+function rest(hours) {
+  advanceTime(hours);
+  player.fatigue = Math.max(player.fatigue - hours * 15, 0);
+  logAction(`Rested for ${hours} hour(s). Fatigue: ${player.fatigue}`);
+}
+function eat(foodItem) {
+  if (removeItem(foodItem)) {
+    player.hunger = Math.max(player.hunger - 40, 0);
+    logAction(`Ate ${foodItem}. Hunger: ${player.hunger}`);
+  } else {
+    logAction(`Tried to eat ${foodItem}, but didn't have it.`);
+  }
+}
+function drink(waterItem) {
+  if (removeItem(waterItem)) {
+    player.thirst = Math.max(player.thirst - 40, 0);
+    logAction(`Drank ${waterItem}. Thirst: ${player.thirst}`);
+  } else {
+    logAction(`Tried to drink ${waterItem}, but didn't have it.`);
+  }
+}
+function injure(desc) {
+  player.injuries.push(desc);
+  logAction(`Sustained injury: ${desc}`);
+}
+
+// ========== EVENT/TIMELINE SYSTEMS ==========
+function advanceTimeline(hours = 1) {
+  // Advance world time
+  player.time.hour += hours;
+  while (player.time.hour >= 24) {
+    player.time.hour -= 24;
+    player.time.day += 1;
+  }
+  // Check timeline events
+  state.world.timeline.forEach(ev => {
+    if (ev.status === "pending") {
+      if (
+        (player.time.day > ev.day) ||
+        (player.time.day === ev.day && player.time.hour >= ev.hour)
+      ) {
+        if (ev.affectedByPlayer && ev.playerAltered) {
+          logAction(`[WORLD NEWS] ${ev.playerAltered}`);
+          ev.status = "altered";
+        } else {
+          logAction(`[WORLD NEWS] ${ev.description}`);
+          ev.status = "complete";
+        }
+      }
+    }
+  });
+}
+
+// ======================
+//    FACTION EVENTS
+// ======================
+function isHostile(faction) {
+  return player.factionAlignment[faction] <= -40;
+}
+function isMember(faction) {
+  return !!player.factionMembership[faction];
+}
+function canStartQuest(faction) {
+  if (isHostile(faction)) return false;
+  if (faction === "NCR" && (isMember("Legion") || isMember("House"))) return false;
+  if (faction === "Legion" && (isMember("NCR") || isMember("House"))) return false;
+  if (faction === "House" && (isMember("NCR") || isMember("Legion"))) return false;
+  return true;
+}
+function changeAlignment(faction, amount) {
+  if (player.factionAlignment[faction] !== undefined) {
+    player.factionAlignment[faction] = Math.max(-100, Math.min(100, player.factionAlignment[faction] + amount));
+    logAction(`Your standing with ${faction} is now ${player.factionAlignment[faction]}.`);
+  }
+}
+function advanceFactionEvents(hours = 1) {
+  factionEvents.forEach(ev => {
+    if (ev.status === "pending") {
+      const dayReached = player.time.day > ev.day || (player.time.day === ev.day && player.time.hour >= ev.hour);
+      const reqMet = !ev.requirements || ev.requirements();
+      const notExclusive = !ev.mutuallyExclusive || ev.mutuallyExclusive.every(fac => !isMember(fac) && !isHostile(fac));
+      if (dayReached && reqMet && notExclusive) {
+        if (ev.affectedByPlayer && ev.playerAltered) {
+          logAction(`[WORLD NEWS] ${ev.description} (But: ${ev.playerAltered})`);
+        } else {
+          logAction(`[FACTION NEWS] ${ev.description}`);
+        }
+        ev.status = "complete";
+        if (ev.faction && !isMember(ev.faction)) player.factionMembership[ev.faction] = true;
+      }
+    }
+  });
+}
+function advanceAllEvents(hours = 1) {
+  advanceTimeline(hours);
+  advanceFactionEvents(hours);
+}
+
+// ==========================
+// AUTOCARDS & LOCATION TRIGGERS
+// ==========================
+function AddTrigger(trigger) {
+  global.triggers.push(trigger);
+}
+function AddLocationTrigger(id, name, keywords, description, cardEntry) {
+  AddTrigger({
+    id: id,
+    stage: "input",
+    condition: () => {
+      return keywords.some(k => input.toLowerCase().includes(k.toLowerCase())) && !state["visited_" + name];
+    },
+    action: () => {
+      state["visited_" + name] = true;
+      output.push(description);
+      AddCard({
+        id: "location_" + name,
+        keys: keywords,
+        entry: cardEntry,
+        type: "Location"
+      });
+    }
+  });
+}
+
+  // Major locations in the Mojave Wasteland
+  const locations = [
+    {
+      id: "primm",
+      keywords: ["Primm"],
+      description: "You step into the dusty, half-abandoned settlement of Primm. The old rollercoaster looms over the town like a skeleton of the past. NCR soldiers eye you from their outpost, while powder gangers skulk nearby in the shadows.",
+      entry: "Primm is a small town at the edge of NCR territory, once known for its rollercoaster casino. Now, it's caught in a power struggle between NCR forces and lawless powder gangers."
+    },
+    {
+      id: "goodsprings",
+      keywords: ["Goodsprings"],
+      description: "The town of Goodsprings lies quiet and sun-bleached under the Mojave sun. A saloon sits near the road, while locals move slowly between scattered buildings. It's peaceful... for now.",
+      entry: "Goodsprings is a small, resilient town in the Mojave Wasteland. It played a pivotal role in the early events of the Courier's journey, known for its rustic charm and strategic location."
+    },
+    {
+      id: "novac",
+      keywords: ["Novac"],
+      description: "The massive dinosaur statue watches silently over the sleepy town of Novac. Inside, travelers find refuge, stories, and the eyes of men who trust no one.",
+      entry: "Novac, named for its decaying 'No Vacancy' motel sign, is a quiet desert outpost haunted by the remnants of its glory days. It's a hub for wayfarers, wanderers, and watchers."
+    },
+    {
+      id: "freeside",
+      keywords: ["Freeside"],
+      description: "Freeside is the seedy, lawless part of New Vegas where anything can be bought or sold—for the right price. Neon signs flicker and gunshots echo through narrow alleys.",
+      entry: "Freeside surrounds the New Vegas Strip, home to many struggling residents and dangerous factions vying for control."
+    },
+    {
+      id: "strip",
+      keywords: ["Strip", "New Vegas Strip"],
+      description: "The neon-lit New Vegas Strip dazzles with glitz, glamour, and danger. Casinos tower like palaces, each promising fortune or ruin to those daring enough to enter.",
+      entry: "The Strip is the heart of New Vegas, ruled by powerful factions and filled with opportunities and threats alike."
+    },
+    {
+      id: "ncr_camp",
+      keywords: ["NCR Camp", "Camp McCarran"],
+      description: "Camp McCarran is a sprawling NCR military base. Soldiers drill under the hot sun, guarding the vital gateway to the Strip and maintaining order in the Mojave.",
+      entry: "Camp McCarran is the New California Republic's strongest foothold near New Vegas, a center of military and intelligence operations."
+    },
+    {
+      id: "boulder_city",
+      keywords: ["Boulder City"],
+      description: "Boulder City is a dusty town on the edge of the wasteland, known for its nearby dam and desperate residents struggling to survive.",
+      entry: "Boulder City has suffered greatly since the Great War, but its people still cling to hope and the promise of reconstruction."
+    },
+    {
+      id: "black_mesa_camp",
+      keywords: ["Black Mesa Camp"],
+      description: "Black Mesa Camp is a secretive Brotherhood of Steel outpost, heavily fortified and patrolled by power-armored soldiers.",
+      entry: "The Brotherhood maintains a vigilant watch here, safeguarding technology and battling threats to humanity."
+    },
+    {
+      id: "helios_one",
+      keywords: ["Helios One", "Helios One Solar Plant"],
+      description: "Helios One towers above the desert, its vast solar arrays glinting in the sun. The plant hums quietly, a relic of pre-war energy technology.",
+      entry: "Helios One is a vital energy source and a strategic asset fought over by several factions."
+    },
+    {
+      id: "powder_ganger_camp",
+      keywords: ["Powder Ganger Camp", "Prison Camp"],
+      description: "The Powder Ganger Camp is a rough encampment of escaped convicts and outlaws. Firelight flickers over crude tents and stolen supplies.",
+      entry: "Powder Gangers are a dangerous faction, preying on travelers and challenging the NCR’s authority."
+    },
+    {
+      id: "vault_21",
+      keywords: ["Vault 21"],
+      description: "Vault 21 in New Vegas is a former Vault-Tec shelter turned casino and hotel, still bearing the scars of its Vault past.",
+      entry: "Vault 21 is one of many Vaults scattered across the Mojave, holding secrets and survivors of the Great War."
+    },
+    {
+      id: "vault_34",
+      keywords: ["Vault 34"],
+      description: "Vault 34 lies sealed beneath the desert, rumored to be one of the more dangerous Vaults due to its weapon stockpiles and experiments.",
+      entry: "Vault 34's history is one of tragedy and conflict, with mutants and marauders now roaming its halls."
+    },
+    {
+      id: "ncr_prison",
+      keywords: ["Prison", "NCR Prison", "Correctional Facility"],
+      description: "The towering walls of the NCR Correctional Facility rise like a fortress. Guards patrol the perimeter, and distant shouts echo inside.",
+      entry: "The NCR Prison houses some of the Mojave's most dangerous criminals, guarded closely by NCR troops."
+    },
+    {
+      id: "skydiving_shack",
+      keywords: ["Sky Diving Shack", "Skydiving Shack", "Sky Diving"],
+      description: "The Sky Diving Shack stands abandoned, a relic of past daredevils and desperate jumpers. Dust covers the worn wooden ramp.",
+      entry: "Once a hub for thrill-seekers looking to jump into the Mojave Wasteland, the Sky Diving Shack now sits silent, a forgotten landmark near Goodsprings."
+    },
+    {
+      id: "red_rock_canyon",
+      keywords: ["Red Rock Canyon"],
+      description: "Red Rock Canyon is a beautiful but dangerous area with towering red cliffs and winding paths.",
+      entry: "Known for its natural beauty and wild creatures, Red Rock Canyon is a favorite spot for explorers and scavengers alike."
+    },
+    {
+      id: "mccarran_airport",
+      keywords: ["McCarran Airport"],
+      description: "The ruined McCarran Airport is now a battleground of factions fighting for control of airspace and supply routes.",
+      entry: "Once a bustling hub, McCarran now serves as a strategic location near New Vegas."
+    },
+    {
+      id: "nikolai",
+      keywords: ["Nikolai's Ship"],
+      description: "Nikolai's Ship is a derelict vessel moored near the coast, filled with smuggled goods and secrets.",
+      entry: "This ship serves as a hideout for smugglers and a waypoint for illicit trade."
+    },
+    {
+      id: "boomer_camp",
+      keywords: ["Boomer Camp", "The Boomers"],
+      description: "The Boomer Camp is a heavily fortified, isolated community known for its artillery and independence.",
+      entry: "The Boomers are a proud, isolated faction with a fierce love of explosives and self-reliance."
+    },
+    {
+      id: "jefferson_camp",
+      keywords: ["Jefferson Camp"],
+      description: "Jefferson Camp is an NCR forward base near Hoover Dam, providing vital support to troops in the field.",
+      entry: "Named for the spirit of independence, Jefferson Camp is a key strategic location."
+    },
+    {
+      id: "camp_forlorn_hope",
+      keywords: ["Camp Forlorn Hope"],
+      description: "Camp Forlorn Hope is a remote NCR military outpost, perched on the edge of the Mojave Desert.",
+      entry: "This forward base serves as a strategic staging ground for NCR forces, guarding the eastern approach to the Mojave."
+    },
+    {
+      id: "cottonwood_cove",
+      keywords: ["Cottonwood Cove"],
+      description: "Cottonwood Cove is a Legion-controlled settlement on the banks of the Colorado River, marked by banners and patrols.",
+      entry: "A vital river crossing and trade post, Cottonwood Cove is heavily guarded by Caesar’s Legion."
+    },
+    {
+      id: "jacobstown",
+      keywords: ["Jacobstown"],
+      description: "Jacobstown lies tucked in the mountains, a refuge for Nightkin and Super Mutants seeking peace and acceptance.",
+      entry: "Once a ghoul settlement, Jacobstown now houses mutants and Nightkin who have rejected violence."
+    },
+    {
+      id: "nelson",
+      keywords: ["Nelson"],
+      description: "Nelson is a small town under brutal Legion occupation, its residents living in fear and oppression.",
+      entry: "Once a mining town, Nelson is now a hotbed of Legion control and harsh rule."
+    },
+    {
+      id: "hoover_dam",
+      keywords: ["Hoover Dam"],
+      description: "The towering Hoover Dam looms over the Colorado River, a critical stronghold for all Mojave factions.",
+      entry: "Control of Hoover Dam is vital to power and security in the Mojave Wasteland."
+    },
+    {
+      id: "nellis_air_force_base",
+      keywords: ["Nellis Air Force Base", "Nellis"],
+      description: "Nellis Air Force Base is home to the isolated Boomers, a heavily armed faction with a formidable arsenal.",
+      entry: "Nellis is a fortified airbase where the Boomers control their explosives and aircraft with fierce pride."
+    },
+    {
+      id: "bitter_springs",
+      keywords: ["Bitter Springs"],
+      description: "Bitter Springs is a dusty refugee camp, scarred by past violence and haunted by memories of conflict.",
+      entry: "An NCR refugee settlement, Bitter Springs serves as a somber reminder of the Mojave's harsh realities."
+    },
+    {
+      id: "gunrunners_plaza",
+      keywords: ["Gun Runners Plaza", "Gun Runners"],
+      description: "Gun Runners Plaza is a bustling arms market, filled with dealers, mercenaries, and dangerous weapons.",
+      entry: "This hub is the go-to place for the best guns and gear in New Vegas."
+    },
+    {
+      id: "gonzalez_military_hq",
+      keywords: ["Gonzalez Military HQ"],
+      description: "Gonzalez Military HQ is an abandoned command center littered with NCR memorabilia and plans.",
+      entry: "Once a strategic NCR base, it now lies deserted but still holds valuable intel."
+    },
+    {
+      id: "black_mesa_station",
+      keywords: ["Black Mesa Station"],
+      description: "Black Mesa Station is a remote Brotherhood of Steel outpost watching over the Mojave's western frontier.",
+      entry: "This station monitors tech threats and protects pre-war relics with strict vigilance."
+    },
+    {
+      id: "hopeville",
+      keywords: ["Hopeville"],
+      description: "Hopeville is a small, forgotten settlement, its buildings cracked and sun-bleached.",
+      entry: "Though abandoned, Hopeville stands as a testament to the lost hopes of Mojave settlers."
+    },
+    {
+      id: "dry_wells",
+      keywords: ["Dry Wells"],
+      description: "The Dry Wells are a series of empty water reservoirs, cracked and choked with dust.",
+      entry: "Once vital for survival, the Dry Wells now serve only as a reminder of the desert’s unforgiving nature."
+    },
+    {
+      id: "garden_grove",
+      keywords: ["Garden Grove"],
+      description: "Garden Grove is a modest farming community struggling to cultivate the harsh soil of the Mojave.",
+      entry: "Its residents rely on ingenuity and perseverance to eke out a living in this barren land."
+    },
+    {
+      id: "oregon_trail",
+      keywords: ["Oregon Trail"],
+      description: "The Oregon Trail is a historic caravan route lined with wrecks and faded signposts.",
+      entry: "This once-bustling trade path now serves as a dangerous highway for scavengers and wanderers."
+    },
+    {
+      id: "salt_lake",
+      keywords: ["Salt Lake"],
+      description: "Salt Lake is a dried-up salt flat, glistening under the relentless sun with its white crust.",
+      entry: "The Salt Lake is treacherous to cross, with little shelter or resources to offer travelers."
+    },
+    {
+      id: "sierra_madre_ruins",
+      keywords: ["Sierra Madre Ruins", "Sierra Madre"],
+      description: "The Sierra Madre Ruins are the skeletal remains of a pre-war casino and resort, shrouded in mystery.",
+      entry: "Once a jewel of luxury, the ruins now hide secrets and dangers long forgotten."
+    },
+    {
+      id: "thorn",
+      keywords: ["Thorn"],
+      description: "Thorn is a rough-and-tumble town with a reputation for lawlessness and cutthroat survival.",
+      entry: "Travelers come to Thorn for opportunity, but few leave unscarred."
+    },
+    {
+      id: "twentynine_palms",
+      keywords: ["Twenty Nine Palms"],
+      description: "Twenty Nine Palms is a small desert town with a skeletal military presence and wary locals.",
+      entry: "Located near the edges of NCR control, the town balances survival and isolation."
+    },
+    {
+      id: "washington_harbor",
+      keywords: ["Washington Harbor"],
+      description: "Washington Harbor is a modest fishing village that clings to survival by the waterside.",
+      entry: "Though small, the harbor is a vital resource for fresh food and trade."
+    },
+    {
+      id: "yucca_mountain",
+      keywords: ["Yucca Mountain"],
+      description: "Yucca Mountain is a forbidding nuclear waste storage site, heavily guarded and dangerous.",
+      entry: "This site holds pre-war secrets and hazardous materials that few dare to approach."
+    },
+    {
+      id: "dry_dock",
+      keywords: ["Dry Dock"],
+      description: "A massive dry dock yard filled with rusting ship hulls and forgotten machinery.",
+      entry: "Once a bustling maritime repair yard, Dry Dock is now a dangerous maze of scrap and salvage near the coast."
+    },
+    {
+      id: "repconn_test_site",
+      keywords: ["REPCONN Test Site"],
+      description: "The skeletal remains of a rocket testing facility stand silent against the desert skyline.",
+      entry: "REPCONN was a pre-war aerospace company; the test site holds secrets and deadly traps."
+    },
+    {
+      id: "camp_golconda",
+      keywords: ["Camp Golconda"],
+      description: "A fortified enclave controlled by the Followers of the Apocalypse.",
+      entry: "Camp Golconda serves as a medical refuge and hub of knowledge in the Mojave Wasteland."
+    },
+    {
+      id: "sunset_sarsaparilla_bottle_corp",
+      keywords: ["Sunset Sarsaparilla Bottling Plant"],
+      description: "An abandoned bottling plant with faded logos and rusty machinery.",
+      entry: "The plant once produced the popular Sunset Sarsaparilla soda, now a relic of pre-war industry."
+    },
+    {
+      id: "black_mountain",
+      keywords: ["Black Mountain"],
+      description: "A towering hill topped with an old radio tower and inhabited by a dangerous, deranged ghoul cult.",
+      entry: "Black Mountain is home to feral ghouls and deadly secrets buried in the ruins of a pre-war military base."
+    },
+    {
+      id: "the_big_empty",
+      keywords: ["The Big Empty"],
+      description: "A sprawling underground bunker complex, housing remnants of pre-war science and technology.",
+      entry: "The Big Empty holds advanced technology and dangerous challenges, guarded by the enigmatic Followers of the Apocalypse."
+    },
+    {
+      id: "the_hoover_dam_battlefield",
+      keywords: ["Hoover Dam Battlefield"],
+      description: "The war-torn plains surrounding Hoover Dam bear the scars of battle, littered with wreckage and fallen soldiers.",
+      entry: "This strategic area is the site of a brutal conflict between the NCR, Legion, and other factions vying for control."
+    },
+    {
+      id: "gambling_den",
+      keywords: ["Gambling Den", "The Tops Casino"],
+      description: "The Tops Casino glimmers with neon and noise, a place where fortunes are won and lost.",
+      entry: "One of the major casinos on the Strip, known for its high stakes and shadowy dealings."
+    },
+    {
+      id: "the_fort",
+      keywords: ["The Fort"],
+      description: "The heavily fortified headquarters of Caesar's Legion along the Colorado River.",
+      entry: "The Fort is a brutal stronghold and center of Legion power in the Mojave."
+    },
+    {
+      id: "vault_22",
+      keywords: ["Vault 22"],
+      description: "Vault 22 is an overgrown botanical experiment gone wrong, teeming with mutated plants and dangerous spores.",
+      entry: "Once a Vault dedicated to agriculture, it now poses a deadly threat to explorers."
+    },
+    {
+      id: "oregon_trail_camp",
+      keywords: ["Oregon Trail Camp"],
+      description: "A small encampment of travelers and scavengers resting along the historic Oregon Trail.",
+      entry: "This camp offers respite for weary travelers but is vulnerable to attacks from raiders and creatures."
+    },
+    {
+      id: "camp_mccarran_south_gate",
+      keywords: ["Camp McCarran South Gate"],
+      description: "The southern entrance to Camp McCarran, heavily guarded and fortified.",
+      entry: "A key checkpoint for NCR forces controlling access to New Vegas."
+    },
+    {
+      id: "new_caledonia",
+      keywords: ["New Caledonia"],
+      description: "A small settlement struggling to survive in the harsh Mojave environment.",
+      entry: "New Caledonia is a haven for traders and those seeking to escape the major factions’ influence."
+    },
+    {
+      id: "red_lizard_lodge",
+      keywords: ["Red Lizard Lodge"],
+      description: "A rustic lodge offering shelter and supplies to travelers passing through the Mojave.",
+      entry: "Known for its hospitality and rugged charm, the lodge is a popular stop for adventurers."
+    },
+    {
+      id: "vault_11",
+      keywords: ["Vault 11"],
+      description: "Vault 11 is infamous for its dark past and the psychological experiment imposed on its inhabitants.",
+      entry: "Now abandoned, the vault is riddled with traps and twisted memories."
+    },
+    {
+      id: "great_khan_camp",
+      keywords: ["Great Khan Camp"],
+      description: "The encampment of the Great Khans, a notorious and fiercely independent raider tribe.",
+      entry: "Known for their brutality and tactical skill, the Khans control much of the eastern Mojave."
+    },
+    {
+      id: "bison_steakhouse",
+      keywords: ["Bison Steve Steakhouse"],
+      description: "A once-popular steakhouse on the Strip, now a shadow of its former glory.",
+      entry: "The Bison Steve Steakhouse offers a glimpse into pre-war luxury amidst the grit of the Mojave."
+    },
+    {
+      id: "mushroom_forest",
+      keywords: ["Mushroom Forest"],
+      description: "An eerie forest filled with giant mutated fungi and dangerous wildlife.",
+      entry: "The Mushroom Forest is a strange, bioluminescent region attracting explorers and scientists alike."
+    },
+    {
+      id: "mojave_outpost",
+      keywords: ["Mojave Outpost"],
+      description: "An NCR outpost positioned on the trade routes, acting as a checkpoint and supply depot.",
+      entry: "The Mojave Outpost is crucial for maintaining NCR presence between major cities."
+    },
+    {
+      id: "ncr_airfield",
+      keywords: ["NCR Airfield"],
+      description: "An old, weathered airfield once used by NCR forces for reconnaissance and transport.",
+      entry: "Though no longer operational, the airfield remains strategically important for controlling the surrounding area."
+    }
+
+  ];
+      locations.forEach(loc => {
+    AddLocationTrigger(
+      "location_" + loc.id + "_trigger",
+      loc.id,
+      loc.keywords,
+      loc.description,
+      loc.entry
+    );
+  });
+// Minor Locations of the Mojave Wasteland
+const minorLocations = [
+    {
+      id: "goodsprings_cave",
+      keywords: ["Goodsprings Cave"],
+      description: "You approach a dark cave entrance nestled in the hills near Goodsprings.",
+      entry: "Goodsprings Cave is a small cavern used by wildlife and occasional travelers."
+    },
+    {
+      id: "lucky_jim_mine",
+      keywords: ["Lucky Jim Mine"],
+      description: "The remnants of the Lucky Jim Mine creak in the wind.",
+      entry: "An old, played-out mine southeast of Nipton, abandoned long ago."
+    },
+    {
+      id: "wolfhorn_ranch",
+      keywords: ["Wolfhorn Ranch"],
+      description: "You spot a broken-down homestead in the distance.",
+      entry: "Wolfhorn Ranch is an old farmstead, now home only to scavengers and coyotes."
+    },
+    {
+      id: "broc_flower_cave",
+      keywords: ["Broc Flower Cave"],
+      description: "Fungi line the damp walls of this quiet cave.",
+      entry: "This cave near Goodsprings is known for rare healing plants and geckos."
+    },
+    {
+      id: "calvary_chapel",
+      keywords: ["Calvary Chapel"],
+      description: "A weathered chapel stands isolated in the desert.",
+      entry: "Calvary Chapel is a pre-war church, long since looted and forgotten."
+    },
+    {
+      id: "dead_wind_cavern",
+      keywords: ["Dead Wind Cavern"],
+      description: "The cavern's stench of death is overwhelming.",
+      entry: "Home to Deathclaws, Dead Wind Cavern is one of the most dangerous locations in the Mojave."
+    },
+    {
+      id: "devils_throat",
+      keywords: ["Devil's Throat", "Devils Throat"],
+      description: "A massive crater splits the earth open ahead.",
+      entry: "A sinkhole northeast of Ranger Station Bravo, containing toxic barrels and secrets."
+    },
+    {
+      id: "cottonwood_overlook",
+      keywords: ["Cottonwood Overlook"],
+      description: "You reach a rocky cliff with a view of the river.",
+      entry: "An overlook above Cottonwood Cove, often used as a Legion sniper post."
+    },
+    {
+      id: "tech_attic",
+      keywords: ["Tech Attic"],
+      description: "Scorched terminals flicker weakly in the dust.",
+      entry: "This attic once housed experimental tech from pre-war researchers."
+    },
+    {
+      id: "scorpion_gulch",
+      keywords: ["Scorpion Gulch"],
+      description: "You tread carefully through a canyon teeming with bark scorpions.",
+      entry: "Located near Helios One, Scorpion Gulch is infamous for its venomous inhabitants."
+    },
+    {
+      id: "bittersprings",
+      keywords: ["Bitter Springs"],
+      description: "Bitter Springs lies in a quiet mountain valley, haunted by the ghosts of its past.",
+      entry: "Once the site of a tragic massacre, Bitter Springs is now an NCR refugee camp."
+    },
+    {
+      id: "hidden_valley",
+      keywords: ["Hidden Valley"],
+      description: "Bunkers dot the sand-swept floor of Hidden Valley, concealed among hills and storms.",
+      entry: "The Brotherhood of Steel hides here, operating out of a secure underground facility."
+    },
+    {
+      id: "ranger_station_charlie",
+      keywords: ["Ranger Station Charlie"],
+      description: "The outpost's radios crackle faintly as the Mojave wind sweeps past.",
+      entry: "Ranger Station Charlie helps monitor Legion movement near the Colorado River."
+    },
+    {
+      id: "rauls_shack",
+      keywords: ["Raul's Shack", "Rauls Shack"],
+      description: "An old shack creaks in the wind, tools scattered across rusted workbenches.",
+      entry: "Raul’s Shack is home to the ghoul mechanic Raul Tejada, tucked away in the mountains."
+    },
+    {
+      id: "horowitz_farmstead",
+      keywords: ["Horowitz Farmstead"],
+      description: "Fields of dead crops surround a bombed-out farmhouse.",
+      entry: "Horowitz Farmstead is a desolate ruin, a reminder of how fragile life is in the Mojave."
+    },
+    {
+      id: "ncr_safehouse",
+      keywords: ["NCR Safehouse"],
+      description: "A hidden steel door in the hills opens to reveal an NCR bunker.",
+      entry: "The NCR Safehouse is a secure retreat for trusted allies of the Republic."
+    },
+    {
+      id: "legion_safehouse",
+      keywords: ["Legion Safehouse"],
+      description: "You find a heavily guarded outpost, adorned with crimson banners.",
+      entry: "The Legion Safehouse is a hidden fallback position for Caesar's most loyal soldiers."
+    },
+    {
+      id: "vault_19",
+      keywords: ["Vault 19"],
+      description: "A worn Vault door stands ajar, darkness spilling out from within.",
+      entry: "Vault 19 was once divided into Red and Blue sectors, a failed psychological experiment now home to ex-cons."
+    },
+    {
+      id: "cliffside_prospectors_camp",
+      keywords: ["Cliffside Prospector Camp"],
+      description: "Shanties cling to the edge of a rocky bluff, home to desperate scavengers.",
+      entry: "This camp is used by wandering prospectors and those trying to avoid the major powers."
+    },
+    {
+      id: "searchlight_airfield",
+      keywords: ["Searchlight Airfield"],
+      description: "Crumbling hangars stand silent in the dust, echoing with ghosts of old world planes.",
+      entry: "Near Camp Searchlight, this abandoned airfield is sometimes used by scavengers and smugglers."
+    },
+    {
+      id: "burton",
+      keywords: ["Burton"],
+      description: "You wander through the dusty yards of Burton, a neglected settlement near the Mojave Outpost.",
+      entry: "Burton is a small, rundown town suffering under a toxic cloud from the REPCONN test site."
+    },
+    {
+      id: "mojave_outpost",
+      keywords: ["Mojave Outpost"],
+      description: "The calm bustle of the Mojave Outpost greets you—soldiers talking under a tattered NCR banner.",
+      entry: "Mojave Outpost is a small NCR checkpoint between Primm and Nipton."
+    },
+    {
+      id: "mccarran_caravans",
+      keywords: ["McCarran Caravans", "Caravans"],
+      description: "Caravans rest beside the ruins near McCarran, guards and merchants unloading supplies.",
+      entry: "Caravans bring trade and travelers through the Mojave—but remain vulnerable to raiders."
+    },
+    {
+      id: "neon_sign",
+      keywords: ["Neon Sign"],
+      description: "A broken neon strip flickers erratically, suspended over a dusty road sign.",
+      entry: "Neon Sign is a minor landmark between Novac and Nipton—quiet, but strangely memorable."
+    },
+    {
+      id: "tumbleweed",
+      keywords: ["Tumbleweed"],
+      description: "A small silvery robot clings to its post beside a quiet highway.",
+      entry: "Tumbleweed is a border checkpoint run by a lone securitron named Lenny."
+    },
+    {
+      id: "primm_golf_course",
+      keywords: ["Primm Golf Course"],
+      description: "Grassless fairways stretch out where the Primm Golf Course once stood.",
+      entry: "Primm Golf Course is an abandoned recreational ground, now sacred to faded memories."
+    },
+    {
+      id: "novac_soda_plaza",
+      keywords: ["Soda Plaza"],
+      description: "A half-collapsed plaza with soda fountains and cracked tile floors.",
+      entry: "Novac Soda Plaza once quenched travelers—now it's fallen into dust and vine."
+    },
+    {
+      id: "ultra_luxe_ent",
+      keywords: ["Ultra-Luxe Entrance", "Ultra Luxe Entrance"],
+      description: "A grand archway peppered with bullet holes marks the entrance to the Ultra-Luxe Casino.",
+      entry: "The Ultra-Luxe Entrance stands vigilant, reflecting both wealth and danger by the Strip."
+    },
+    {
+      id: "westside",
+      keywords: ["Westside"],
+      description: "Graffiti-covered walls and collapsed storefronts line the rough streets of Westside.",
+      entry: "Westside is a tough neighborhood in New Vegas, home to the Kings and street-level operations."
+    },
+    {
+      id: "old_castle",
+      keywords: ["Old Mormon Fort", "Old Mormon Fort", "Fort"],
+      description: "Stone walls and old towers stand silent—once a fortress, now a tourist attraction.",
+      entry: "The Old Mormon Fort is the base of operations for the Followers of the Apocalypse."
+    },
+    {
+      id: "camp_mccarran",
+      keywords: ["Camp McCarran", "McCarran"],
+      description: "Tents and patrols bustle at Camp McCarran, the NCR’s hub near New Vegas.",
+      entry: "Camp McCarran is the NCR’s main military base policing the Strip."
+    },
+    {
+      id: "freeside_tribunal",
+      keywords: ["Freeside", "Freeside"],
+      description: "Sanctuary formed where the streets feel rough, temples of small justice.",
+      entry: "Freeside’s courtroom and squares serve daily for the tribes under the Kings."
+    },
+    {
+      id: "jackrabbit_springs",
+      keywords: ["Jack Rabbit Springs", "Jackrabbit Springs"],
+      description: "A gentle trickle of water seeps out of the desert floor at Jackrabbit Springs.",
+      entry: "Jackrabbit Springs is a vital water source for caravans traveling between New Vegas and the deep Mojave."
+    },
+    {
+      id: "overlook",
+      keywords: ["Hoover Dam Overlook"],
+      description: "A high vantage point above Hoover Dam reveals the grandeur of engineering.",
+      entry: "The Hoover Dam Overlook offers sweeping views—and danger—from thirsty factions."
+    },
+    {
+      id: "powder_ganger_prison_camp",
+      keywords: ["Powder Ganger Camp", "Prison Camp"],
+      description: "A circle of tents surrounds a crude campfire in the shadow of NCR walls.",
+      entry: "A powder ganger encampment formed near the old NCR prison—threatening travelers."
+    },
+    {
+      id: "felicity_mine",
+      keywords: ["Felicity Mine", "Felicity"],
+      description: "Abandoned shafts rise from the earth near the Colorado River.",
+      entry: "Felicity Mine was once a small mining operation, now silent beneath the desert sun."
+    },
+    {
+      id: "huntley_station",
+      keywords: ["Huntley Station"],
+      description: "Old rail tracks and crates scatter around a lonely station platform.",
+      entry: "Huntley Station served travelers before the war—it’s now quiet, except for the wind."
+    },
+    {
+      id: "jefferson_library",
+      keywords: ["Jefferson Library"],
+      description: "Shelves sag with dusty books in the old library near Jefferson Camp.",
+      entry: "Jefferson Library contains pre-war and NCR documents—lost to time."
+    },
+    {
+      id: "black_foot_cave",
+      keywords: ["Blackfoot Cave"],
+      description: "A narrow cavern mouth hides this nook from bright light.",
+      entry: "Blackfoot Cave shelters small scavengers and maybe something bigger."
+    },
+    {
+      id: "ncr_camp_taylor",
+      keywords: ["Camp Taylor"],
+      description: "NCR Soldiers drill near dusty tents at Camp Taylor.",
+      entry: "Camp Taylor is a minor outpost keeping watch on NCR battlefields."
+    },
+    {
+      id: "charleworth_ruins",
+      keywords: ["Charleworth Ruins"],
+      description: "Broken stone slabs and toppled pillars mark Charleworth’s old courthouse.",
+      entry: "Charleworth Ruins once held regional justice in the NCR days."
+    },
+    {
+      id: "nikolai_shipwreck",
+      keywords: ["Nikolai's Shipwreck", "Nikolai Ship"],
+      description: "The rusting hull of Nikolai's ship lies half-buried in the desert sands, its timbers creaking with the wind.",
+      entry: "Nikolai's Shipwreck is a forgotten remnant of smuggling operations, filled with scattered crates and whispered secrets."
+    },
+    {
+      id: "sunset_sarsaparilla_plant",
+      keywords: ["Sunset Sarsaparilla Plant", "Sarsaparilla Plant"],
+      description: "The weathered walls of the Sunset Sarsaparilla bottling plant stand silent under the scorching sun.",
+      entry: "Once a bustling factory, this plant produced the beloved Sunset Sarsaparilla before the Great War shut it down."
+    },
+    {
+      id: "jackpot_casino",
+      keywords: ["Jackpot Casino"],
+      description: "The bright signs of the Jackpot Casino flicker dimly in the twilight, a beacon for hopeful gamblers.",
+      entry: "Jackpot Casino is a smaller gambling hall on the outskirts of New Vegas, known for its loose games and rowdy crowd."
+    },
+    {
+      id: "henderson",
+      keywords: ["Henderson"],
+      description: "Henderson is a bustling settlement, partially rebuilt with hope amidst the ruins of the old world.",
+      entry: "Henderson serves as a key supply hub and home to many displaced Mojave residents."
+    },
+    {
+      id: "novac_gas_station",
+      keywords: ["Novac Gas Station"],
+      description: "The abandoned gas station in Novac leaks old fuel and memories into the dry air.",
+      entry: "This station once serviced travelers along the highway but now lies in disrepair."
+    },
+    {
+      id: "ncr_supply_depot",
+      keywords: ["NCR Supply Depot", "Supply Depot"],
+      description: "Stacks of crates and barrels fill the NCR Supply Depot, guarded by vigilant soldiers.",
+      entry: "The depot is a crucial logistics point for NCR forces operating in the Mojave."
+    },
+    {
+      id: "boomer_airfield",
+      keywords: ["Boomer Airfield", "Boomer Field"],
+      description: "Old warplanes and artillery lie scattered across the Boomer Airfield’s dusty grounds.",
+      entry: "The Boomers use this airfield for training and maintaining their explosive arsenal."
+    },
+    {
+      id: "nikolai_cove",
+      keywords: ["Nikolai Cove"],
+      description: "A hidden cove near the coast shelters small boats and secret shipments.",
+      entry: "Nikolai Cove is rumored to be a smuggling hotspot guarded by local gangs."
+    },
+    {
+      id: "primm_gas_station",
+      keywords: ["Primm Gas Station"],
+      description: "The gas station pumps sputter weakly, abandoned but still standing against time.",
+      entry: "Once a lifeline for travelers, the Primm Gas Station is now a relic with faded signage."
+    },
+    {
+      id: "sloan_cabin",
+      keywords: ["Sloan Cabin"],
+      description: "A modest cabin with smoke curling from its chimney stands isolated in the wasteland.",
+      entry: "Sloan Cabin offers shelter to those who know the dangers lurking outside."
+    },
+    {
+      id: "cosmic_carnival",
+      keywords: ["Cosmic Carnival"],
+      description: "Bright colors and old carnival rides creak faintly in the desert wind.",
+      entry: "The Cosmic Carnival once brought joy to travelers, now a ghostly reminder of brighter days."
+    },
+    {
+      id: "reno_ruins",
+      keywords: ["Reno Ruins"],
+      description: "Collapsed buildings and rusting vehicles litter the outskirts of old Reno.",
+      entry: "Reno Ruins are a stark reminder of the devastation the Great War left behind."
+    },
+    {
+      id: "sierra_madre_hideout",
+      keywords: ["Sierra Madre Hideout", "Sierra Madre"],
+      description: "Hidden deep in the mountains, the Sierra Madre Hideout is cloaked in mystery and danger.",
+      entry: "Few who enter the Sierra Madre ever return, and those who do rarely speak of it."
+    },
+    {
+      id: "raiders_camp",
+      keywords: ["Raiders Camp"],
+      description: "Crude tents and makeshift barricades surround a fire where rough men gather.",
+      entry: "Raiders Camp is home to lawless marauders preying on unsuspecting travelers."
+    },
+    {
+      id: "prospector_trail",
+      keywords: ["Prospector Trail"],
+      description: "A narrow dirt path winds through rocky hills, worn by footsteps of those chasing fortune.",
+      entry: "The Prospector Trail connects minor mining sites scattered across the Mojave."
+    },
+    {
+      id: "vault_22",
+      keywords: ["Vault 22"],
+      description: "Overgrown and sealed off, Vault 22’s entrance is almost hidden by desert flora.",
+      entry: "Vault 22 was a botanical experiment gone wrong, now home to deadly creatures and strange plants."
+    },
+    {
+      id: "camp_searchlight",
+      keywords: ["Camp Searchlight"],
+      description: "The charred remains of Camp Searchlight speak of recent battles and harsh desert justice.",
+      entry: "Camp Searchlight once served as an NCR outpost guarding the southern Mojave."
+    },
+    {
+      id: "joshua_gardens",
+      keywords: ["Joshua Gardens"],
+      description: "A fenced-off area with hardy desert plants struggling to thrive under the sun.",
+      entry: "Joshua Gardens is a small, self-sustaining community dedicated to agricultural research."
+    },
+    {
+      id: "silver_peak_mine",
+      keywords: ["Silver Peak Mine"],
+      description: "The entrance to Silver Peak Mine yawns wide, dark and foreboding.",
+      entry: "Silver Peak Mine holds rich mineral veins but is fraught with danger and collapse risks."
+    },
+    {
+      id: "sundance_camp",
+      keywords: ["Sundance Camp"],
+      description: "A small cluster of tents and shacks serve as a resting place for weary travelers.",
+      entry: "Sundance Camp is a neutral zone where traders and mercenaries often cross paths."
+    },
+    {
+      id: "shelter_canyon",
+      keywords: ["Shelter Canyon"],
+      description: "A narrow canyon with steep walls offers a rare place of shade and shelter.",
+      entry: "Shelter Canyon is known as a refuge for travelers caught in sudden desert storms."
+    },
+    {
+      id: "dusty_trail",
+      keywords: ["Dusty Trail"],
+      description: "A long, winding trail marked by old wagon tracks and scattered bones.",
+      entry: "The Dusty Trail was once a vital trade route but is now haunted by bandits."
+    },
+    {
+      id: "ironwood_ridge",
+      keywords: ["Ironwood Ridge"],
+      description: "Sharp, jagged ridges with hardy ironwood trees stand defiant against the wasteland.",
+      entry: "Ironwood Ridge provides wood and shelter for nearby settlements, but it’s dangerous at night."
+    },
+    {
+      id: "black_canyon",
+      keywords: ["Black Canyon"],
+      description: "A dark, twisting canyon where shadows fall like a permanent night.",
+      entry: "Black Canyon is rumored to harbor feral ghouls and lost NCR scouts."
+    },
+    {
+      id: "rusted_pipeline",
+      keywords: ["Rusted Pipeline"],
+      description: "An ancient water pipeline stretches broken and corroded across the desert floor.",
+      entry: "Once a lifeline for Mojave settlements, the Rusted Pipeline now leaks and rusts under the sun."
+    },
+    {
+      id: "whispering_dunes",
+      keywords: ["Whispering Dunes"],
+      description: "Tall sand dunes shift endlessly with the wind, their whispers carried far and wide.",
+      entry: "Whispering Dunes are said to hide lost travelers and buried secrets."
+    },
+    {
+      id: "iron_hills_mine",
+      keywords: ["Iron Hills Mine"],
+      description: "Old mining tunnels delve deep beneath the Iron Hills’ rugged surface.",
+      entry: "Iron Hills Mine once yielded precious metals but now serves as a hideout for outlaws."
+    },
+    {
+      id: "old_bridge",
+      keywords: ["Old Bridge"],
+      description: "A rickety wooden bridge crosses a dry wash, creaking under the weight of time.",
+      entry: "Old Bridge connects two important paths but is a common spot for ambushes."
+    },
+    {
+      id: "cactus_gulch",
+      keywords: ["Cactus Gulch"],
+      description: "Dense patches of tall cactus plants cover this dry gulch, sharp and unforgiving.",
+      entry: "Cactus Gulch is a natural barrier between rival factions’ territories."
+    },
+    {
+      id: "dead_man_pass",
+      keywords: ["Dead Man Pass"],
+      description: "A narrow mountain pass littered with the bones of lost travelers.",
+      entry: "Dead Man Pass is notorious for deadly ambushes and extreme weather."
+    },
+    {
+      id: "barrens_outpost",
+      keywords: ["Barrens Outpost"],
+      description: "A lonely outpost stands amidst barren wasteland, its flag fluttering weakly.",
+      entry: "Barrens Outpost is a forward post used by scavengers and NCR scouts."
+    },
+    {
+      id: "stone_ridge",
+      keywords: ["Stone Ridge"],
+      description: "Rock formations resembling jagged teeth mark the Stone Ridge skyline.",
+      entry: "Stone Ridge is a natural landmark and a challenging terrain for travelers."
+    },
+    {
+      id: "rusty_relic",
+      keywords: ["Rusty Relic"],
+      description: "A huge rusted war machine lies half-buried in the desert sand.",
+      entry: "The Rusty Relic is a reminder of the pre-war conflict, drawing scavengers and looters."
+    },
+    {
+      id: "dry_springs",
+      keywords: ["Dry Springs"],
+      description: "Cracked earth and dried-up springs tell the story of a once-thriving water source.",
+      entry: "Dry Springs is a cautionary tale of the Mojave’s shifting climate."
+    },
+    {
+      id: "shadow_ridge",
+      keywords: ["Shadow Ridge"],
+      description: "Long shadows cast by jagged cliffs make Shadow Ridge a foreboding place at dusk.",
+      entry: "Shadow Ridge is home to mysterious creatures and rumored supernatural activity."
+    },
+    {
+      id: "ironclad_camp",
+      keywords: ["Ironclad Camp"],
+      description: "Makeshift fortifications and iron scraps form the walls of this rough camp.",
+      entry: "Ironclad Camp is controlled by a militant gang known for their brutal tactics."
+    },
+    {
+      id: "howling_hollow",
+      keywords: ["Howling Hollow"],
+      description: "Wind whistles through the hollow, producing eerie, haunting sounds.",
+      entry: "Howling Hollow is often avoided by locals due to ghost stories and strange noises."
+    },
+    {
+      id: "silver_sands",
+      keywords: ["Silver Sands"],
+      description: "Glittering sands shimmer under the sun, hiding precious minerals beneath.",
+      entry: "Silver Sands attracts prospectors but is plagued by dangerous wildlife."
+    },
+    {
+      id: "forgotten_fort",
+      keywords: ["Forgotten Fort"],
+      description: "Ruined walls and collapsed towers mark the Forgotten Fort, lost to history.",
+      entry: "The Forgotten Fort once guarded vital trade routes but fell to time and war."
+    },
+    {
+      id: "blackout_cave",
+      keywords: ["Blackout Cave"],
+      description: "Complete darkness envelops the interior of this deep, unexplored cave.",
+      entry: "Blackout Cave is a dangerous location rumored to house mutated creatures."
+    },
+    {
+      id: "sunset_ridge",
+      keywords: ["Sunset Ridge"],
+      description: "The sky glows orange and pink over the jagged cliffs of Sunset Ridge.",
+      entry: "Sunset Ridge is a scenic lookout popular among scavengers for its breathtaking views."
+    },
+    {
+      id: "ghost_town_ruins",
+      keywords: ["Ghost Town Ruins"],
+      description: "Crumbling buildings and empty streets tell the story of a long-abandoned town.",
+      entry: "Ghost Town Ruins once thrived during the pre-war mining boom but now stands empty."
+    },
+    {
+      id: "whispering_wells",
+      keywords: ["Whispering Wells"],
+      description: "Ancient wells stand silent, their depths rumored to whisper secrets on the wind.",
+      entry: "Whispering Wells are said to be haunted, with many travelers avoiding the area after dusk."
+    },
+    {
+      id: "cinder_bluff",
+      keywords: ["Cinder Bluff"],
+      description: "Blackened earth and ash cover the slopes of this volcanic bluff.",
+      entry: "Cinder Bluff is the remnants of a volcanic eruption, now a dangerous zone of unstable ground."
+    },
+    {
+      id: "lost_coyote_trail",
+      keywords: ["Lost Coyote Trail"],
+      description: "A narrow, overgrown trail marked by broken bones and claw marks.",
+      entry: "Lost Coyote Trail is said to be cursed, with many who wander it never returning."
+    },
+    {
+      id: "iron_gate_pass",
+      keywords: ["Iron Gate Pass"],
+      description: "A rusted iron gate bars the path through this mountain pass.",
+      entry: "Iron Gate Pass is a strategic choke point once guarded by NCR forces."
+    },
+    {
+      id: "sundown_settlement",
+      keywords: ["Sundown Settlement"],
+      description: "A small cluster of ramshackle homes lit by flickering lanterns as night falls.",
+      entry: "Sundown Settlement is home to hardy survivors eking out a living far from civilization."
+    },
+    {
+      id: "bleeding_rock",
+      keywords: ["Bleeding Rock"],
+      description: "A red-stained rock formation resembling a wound on the desert floor.",
+      entry: "Bleeding Rock is considered sacred by some local tribes and feared by others."
+    },
+    {
+      id: "shattered_mesa",
+      keywords: ["Shattered Mesa"],
+      description: "Broken plateaus and deep crevices form the rugged terrain of Shattered Mesa.",
+      entry: "Shattered Mesa is a hazardous area for travelers, with many losing their way among the cliffs."
+    },
+    {
+      id: "rusted_tank_graveyard",
+      keywords: ["Rusted Tank Graveyard"],
+      description: "Old, rusted military tanks lie half-buried in the sand, silent witnesses to war.",
+      entry: "The Rusted Tank Graveyard is a graveyard of failed machines and lost battles."
+    },
+    {
+      id: "wailing_cliffs",
+      keywords: ["Wailing Cliffs"],
+      description: "Wind rushing through the narrow cliff faces produces haunting wails and howls.",
+      entry: "Wailing Cliffs are known for strange sounds and eerie legends among locals."
+    },
+    {
+      id: "scorched_forest",
+      keywords: ["Scorched Forest"],
+      description: "Charred tree trunks and blackened earth mark the remains of a forest fire.",
+      entry: "The Scorched Forest is a dangerous zone where wildlife struggles to survive."
+    },
+    {
+      id: "broken_arrow_pass",
+      keywords: ["Broken Arrow Pass"],
+      description: "A winding pass dotted with shattered arrows and abandoned campsites.",
+      entry: "Broken Arrow Pass was once a battleground for rival factions and is still dangerous today."
+    },
+    {
+      id: "rusted_railway",
+      keywords: ["Rusted Railway"],
+      description: "Derelict tracks stretch across the desert, overgrown and unused.",
+      entry: "The Rusted Railway once connected major settlements but now serves only scavengers."
+    },
+    {
+      id: "hollowed_hills",
+      keywords: ["Hollowed Hills"],
+      description: "Low hills riddled with caves and tunnels, casting eerie shadows at sunset.",
+      entry: "Hollowed Hills are home to scavengers, small gangs, and rare wildlife."
+    },
+    {
+      id: "ashen_valley",
+      keywords: ["Ashen Valley"],
+      description: "A valley filled with fine gray ash, where little life survives.",
+      entry: "Ashen Valley is a barren wasteland formed by a long-ago explosion."
+    },
+    {
+      id: "rusted_spires",
+      keywords: ["Rusted Spires"],
+      description: "Tall, rusted metal spires rise like skeletons of a forgotten city.",
+      entry: "The Rusted Spires are remnants of pre-war industry, now a dangerous place to explore."
+    },
+    {
+      id: "silent_basin",
+      keywords: ["Silent Basin"],
+      description: "A quiet, sunken basin where sound seems to be swallowed by the earth.",
+      entry: "Silent Basin is a mysterious place feared for its unnatural silence."
+    },
+    {
+      id: "dustbowl_outcrop",
+      keywords: ["Dustbowl Outcrop"],
+      description: "A rocky outcrop overlooking a swirling duststorm in the distance.",
+      entry: "Dustbowl Outcrop offers a vantage point but is often battered by harsh winds."
+    },
+    {
+      id: "forgotten_well",
+      keywords: ["Forgotten Well"],
+      description: "A deep well surrounded by cracked earth, long dried up and overgrown.",
+      entry: "Forgotten Well was once a vital water source, now only a memory."
+    }
+];
+  // Add all minor locations
+  minorLocations.forEach(loc => {
+    AddLocationTrigger(
+      "location_" + loc.id + "_trigger",
+      loc.id,
+      loc.keywords,
+      loc.description,
+      loc.entry
+    );
+});
+  text = AutoCards("input", text);    <==== Only if you are using LewdLeah's Auto-Cards for your Scenarios
+  // Your other input modifier scripts go here (alternative)
+  return {text};
+};
+modifier(text);
